@@ -98,10 +98,10 @@
 
     /* STANDINGS */
     .standings-table { background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid rgba(255,255,255,0.07); overflow: hidden; }
-    .standings-header { display: grid; grid-template-columns: 32px 1fr auto auto auto; gap: 0; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .standings-header { display: grid; grid-template-columns: 32px 1fr 80px 80px 80px; gap: 0; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
     .standings-header span { font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,0.25); text-align: right; }
     .standings-header span:nth-child(2) { text-align: left; }
-    .standings-row { display: grid; grid-template-columns: 32px 1fr auto auto auto; gap: 0; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); align-items: center; cursor: pointer; }
+    .standings-row { display: grid; grid-template-columns: 32px 1fr 80px 80px 80px; gap: 0; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); align-items: center; cursor: pointer; }
     .standings-row:last-child { border-bottom: none; }
     .standings-row.me { background: rgba(201,168,76,0.04); }
     .s-rank { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; line-height: 1; }
@@ -703,7 +703,7 @@ function renderStandingsPage() {
           <div class="s-name" style="${isMe ? 'color:#c9a84c;' : ''}">${p.full_name}${isMe ? ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(201,168,76,0.2);color:#c9a84c;font-family:Barlow Condensed,sans-serif;font-weight:700;">YOU</span>' : ''}</div>
         </div>
         <div class="s-grp" style="color:${grpColor};">${p.groupPts}</div>
-        <div class="s-ko" style="color:${koColor};">+ ${p.koPts}</div>
+        <div class="s-ko" style="color:${koColor}; text-align:right; padding-right:0;">${p.koPts}</div>
         <div class="s-total" style="color:${scoreColor};">${p.total}</div>
       </div>
     `
@@ -714,11 +714,11 @@ function renderStandingsPage() {
       <div class="page-title">Standings</div>
       <div class="page-sub">Group pts + Knockout pts = Total</div>
       <div class="standings-table">
-        <div class="standings-header">
+        <div class="standings-header" style="grid-template-columns: 32px 1fr 80px 80px 80px;">
           <span style="text-align:left;">#</span>
           <span style="text-align:left;">Name</span>
-          <span>Grp</span>
-          <span>KO</span>
+          <span>Group</span>
+          <span>Knockout</span>
           <span>Total</span>
         </div>
         ${rows || '<div style="padding:16px;color:rgba(255,255,255,0.3);font-size:13px;">No participants yet.</div>'}
