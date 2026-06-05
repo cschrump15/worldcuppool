@@ -936,8 +936,8 @@ function renderScoringPage() {
 
 // ─── ADMIN PAGE ────────────────────────────────────────────────────────────
 function renderAdminPage() {
-  const tabs = ['matches', 'results', 'payments']
-  const tabLabels = { matches: 'Matches', results: 'Results', payments: 'Payments' }
+  const tabs = ['matches', 'picks', 'results', 'payments']
+  const tabLabels = { matches: 'Matches', picks: 'Pick Status', results: 'Results', payments: 'Payments' }
   const activeTab = state.adminTab || 'matches'
 
   let tabContent = ''
@@ -991,7 +991,87 @@ function renderAdminPage() {
         }).join('')
   }
 
-  if (activeTab === 'payments') {
+  if (activeTab === 'picks') {
+    const sortedParticipants = [...state.participants].sort((a,b) => a.full_name.localeCompare(b.full_name))
+    const groupMatches = state.matches.filter(m => m.stage === 'group' && !m.locked === false || m.locked)
+
+    // Group all matches by date
+    const matchesByDate = {}
+    state.matches.filter(m => m.stage === 'group').forEach(m => {
+      const dateKey = new Date(m.kickoff_time).toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York'
+      })
+      if (!matchesByDate[dateKey]) matchesByDate[dateKey] = []
+      matchesByDate[dateKey].push(m)
+    })
+
+    tabContent = Object.entries(matchesByDate).map(([date, matches]) => {
+      const totalPicks = matches.length * sortedParticipants.length
+      const madePicks = matches.reduce((sum, m) => {
+        return sum + sortedParticipants.filter(u => state.allPicks.find(p => p.user_id === u.id && p.match_id === m.id)).length
+      }, 0)
+
+      return `
+        <div style="margin-bottom:16px;">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9a84c;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
+            <span>${date}</span>
+            <span style="color:rgba(255,255,255,0.3);font-size:10px;">${madePicks}/${totalPicks} picks</span>
+          </div>
+          <div style="background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;">
+            <div style="overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;min-width:400px;">
+                <thead>
+                  <tr>
+                    <th style="text-align:left;padding:8px 12px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.25);border-bottom:1px solid rgba(255,255,255,0.06);white-space:nowrap;position:sticky;left:0;background:#0a0f07;">Match</th>
+                    ${sortedParticipants.map(u => `
+                      <th style="text-align:center;padding:8px 6px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:rgba(255,255,255,0.25);border-bottom:1px solid rgba(255,255,255,0.06);white-space:nowrap;">
+                        ${u.full_name.split(' ')[0]}
+                      </th>
+                    `).join('')}
+                    <th style="text-align:right;padding:8px 12px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.25);border-bottom:1px solid rgba(255,255,255,0.06);">Done</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${matches.map(m => {
+                    const ha = TEAM_ABBR[m.home_team] || m.home_team
+                    const aa = TEAM_ABBR[m.away_team] || m.away_team
+                    const pickedCount = sortedParticipants.filter(u => state.allPicks.find(p => p.user_id === u.id && p.match_id === m.id)).length
+                    const pct = sortedParticipants.length > 0 ? (pickedCount / sortedParticipants.length) * 100 : 0
+                    return `
+                      <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <td style="padding:9px 12px;font-size:12px;font-weight:500;white-space:nowrap;color:#e8f0e0;position:sticky;left:0;background:#0a0f07;">
+                          <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;color:#c9a84c;display:block;margin-bottom:1px;">GRP ${m.group_name}</span>
+                          ${ha} vs ${aa}
+                        </td>
+                        ${sortedParticipants.map(u => {
+                          const hasPick = state.allPicks.find(p => p.user_id === u.id && p.match_id === m.id)
+                          return `
+                            <td style="text-align:center;padding:9px 6px;">
+                              <span style="display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700;background:${hasPick ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.1)'};color:${hasPick ? '#4ade80' : '#f87171'};font-family:'Barlow Condensed',sans-serif;">
+                                ${hasPick ? '✓' : '—'}
+                              </span>
+                            </td>
+                          `
+                        }).join('')}
+                        <td style="padding:9px 12px;">
+                          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+                            <div style="width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;">
+                              <div style="height:100%;border-radius:2px;width:${pct}%;background:${pct===100?'#4ade80':pct>0?'#c9a84c':'#f87171'};"></div>
+                            </div>
+                            <span style="font-size:11px;font-weight:700;color:${pct===100?'#4ade80':pct>0?'#c9a84c':'#f87171'};font-family:'Barlow Condensed',sans-serif;">${pickedCount}/${sortedParticipants.length}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    `
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `
+    }).join('')
+  }
     const paidCount = state.participants.filter(p => p.paid).length
     tabContent = `
       <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:12px;">
