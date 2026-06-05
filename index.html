@@ -840,6 +840,10 @@ function renderDistCard(m) {
 
 // ─── SCORING PAGE ──────────────────────────────────────────────────────────
 function renderScoringPage() {
+  const pot = (state.participants.length - 1) * 30
+  const first = Math.round(pot * 0.50)
+  const second = Math.round(pot * 0.30)
+  const third = Math.round(pot * 0.20)
   const stages = [
     { key: 'group', name: 'Group Stage', winner: 4, bonus: 1 },
     { key: 'r32',   name: 'Round of 32', winner: 6, bonus: 1 },
@@ -853,13 +857,7 @@ function renderScoringPage() {
       <div class="page-title">Scoring</div>
       <div class="page-sub">How points are calculated.</div>
 
-      ${(() => {
-        const pot = (state.participants.length - 1) * 30
-        const first = Math.round(pot * 0.50)
-        const second = Math.round(pot * 0.30)
-        const third = Math.round(pot * 0.20)
-        return `
-          <!-- Row 1: Max Score + Total Pot -->
+      <!-- Row 1: Max Score + Total Pot -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
             <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:16px;text-align:center;">
               <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">Max Score</div>
@@ -891,9 +889,7 @@ function renderScoringPage() {
               <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">20% of pot</div>
             </div>
           </div>
-        `
-      })()}
-
+       
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
         ${stages.map(s => `
           <div style="background:#141a0f;border:1px solid rgba(255,255,255,0.07);border-radius:9px;padding:14px;">
