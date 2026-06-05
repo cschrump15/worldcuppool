@@ -576,8 +576,8 @@ function renderMatchCard(m) {
     if (isSelected && isDraw) {
       return `background:#c9a84c; border-color:#c9a84c; color:#000;`
     }
-    if (isHome) return `background:${hc.bg}22; border-color:${hc.border}55; color:${hc.text === '#000' ? hc.bg : hc.bg};`
-    if (isAway) return `background:${ac.bg}22; border-color:${ac.border}55; color:${ac.text === '#000' ? ac.bg : ac.bg};`
+    if (isHome) return `background:${tc.bg}; border-color:${tc.border}; color:${tc.text}; opacity:0.45;`
+    if (isAway) return `background:${ac.bg}; border-color:${ac.border}; color:${ac.text}; opacity:0.45;`
     return ''
   }
 
