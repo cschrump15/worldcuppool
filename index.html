@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>World Cup Pool 2026</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Barlow', sans-serif; background: #0a0f07; color: #e8f0e0; min-height: 100vh; }
+
+    /* TOPBAR */
+    .topbar { background: #060a04; border-bottom: 1px solid rgba(255,255,255,0.07); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .topbar-logo .topbar-year { display: block; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700; color: #c9a84c; letter-spacing: 2px; text-transform: uppercase; }
+    .topbar-logo .topbar-title { display: block; font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 800; color: #fff; letter-spacing: 2px; text-transform: uppercase; line-height: 1; }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+    .topbar-user { font-size: 12px; color: rgba(255,255,255,0.5); }
+    .topbar-user strong { color: #fff; }
+    .signout-btn { padding: 4px 10px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.15); background: transparent; color: rgba(255,255,255,0.5); font-size: 11px; cursor: pointer; font-family: 'Barlow', sans-serif; }
+
+    /* BOTTOM NAV */
+    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #060a04; border-top: 1px solid rgba(255,255,255,0.08); display: flex; padding: 6px 0 10px; z-index: 100; }
+    .bnav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; padding: 4px 0; border: none; background: transparent; }
+    .bnav-icon { font-size: 20px; line-height: 1; }
+    .bnav-label { font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: rgba(255,255,255,0.35); }
+    .bnav-active .bnav-label { color: #4ade80; }
+
+    /* MAIN */
+    .main-content { padding-bottom: 80px; }
+    .page { max-width: 700px; margin: 0 auto; padding: 16px 14px; }
+    .page-title { font-family: 'Barlow Condensed', sans-serif; font-size: 28px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; color: #e8f0e0; }
+    .page-sub { color: rgba(255,255,255,0.4); font-size: 12px; margin-bottom: 16px; }
+
+    /* LOGIN */
+    .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #0a0f07; background-image: radial-gradient(ellipse at 50% 40%, rgba(74,222,128,0.08) 0%, transparent 60%); padding: 20px; }
+    .login-card { width: 100%; max-width: 360px; padding: 36px 28px; background: #141a0f; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; text-align: center; }
+    .login-year-badge { display: inline-block; background: #c9a84c; color: #000; font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 800; letter-spacing: 2px; padding: 2px 10px; border-radius: 4px; margin-bottom: 8px; }
+    .login-title { font-family: 'Barlow Condensed', sans-serif; font-size: 28px; font-weight: 800; color: #fff; letter-spacing: 2px; text-transform: uppercase; line-height: 1.1; margin-bottom: 4px; }
+    .login-sub { color: rgba(255,255,255,0.35); font-size: 12px; margin-bottom: 20px; }
+    .login-toggle { display: flex; background: rgba(255,255,255,0.05); border-radius: 7px; padding: 3px; margin-bottom: 20px; }
+    .toggle-btn { flex: 1; padding: 7px; border-radius: 5px; border: none; background: transparent; color: rgba(255,255,255,0.4); font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; }
+    .toggle-btn.active { background: #c9a84c; color: #000; }
+    .field-label { font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: rgba(255,255,255,0.4); text-transform: uppercase; margin-bottom: 5px; text-align: left; }
+    .field-input { width: 100%; padding: 10px 12px; border-radius: 7px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; font-family: 'Barlow', sans-serif; font-size: 14px; outline: none; margin-bottom: 14px; }
+    .field-input:focus { border-color: rgba(201,168,76,0.5); }
+    .pin-row { display: flex; gap: 8px; margin-bottom: 14px; justify-content: center; }
+    .pin-input { width: 48px; height: 48px; text-align: center; font-size: 18px; font-weight: 600; border-radius: 7px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; outline: none; }
+    .pin-input:focus { border-color: rgba(201,168,76,0.5); }
+    .btn-primary { width: 100%; padding: 12px; border-radius: 7px; background: #c9a84c; border: none; color: #000; font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; margin-top: 6px; }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error-msg { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); color: #f87171; border-radius: 6px; padding: 9px 12px; font-size: 12px; margin-bottom: 14px; text-align: left; }
+
+    /* TABS */
+    .stage-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    .stage-tab { padding: 7px 14px; border-radius: 6px; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.4); cursor: pointer; }
+    .stage-tab.active { background: rgba(201,168,76,0.12); border-color: rgba(201,168,76,0.4); color: #c9a84c; }
+
+    /* GROUP HEADERS */
+    .group-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); margin-bottom: 6px; cursor: pointer; }
+    .group-header.open { background: rgba(201,168,76,0.07); border-color: rgba(201,168,76,0.25); border-radius: 8px 8px 0 0; margin-bottom: 0; }
+    .group-header-label { font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: rgba(255,255,255,0.5); }
+    .group-header.open .group-header-label { color: #c9a84c; }
+    .group-arrow { color: rgba(255,255,255,0.3); font-size: 13px; transition: transform 0.2s; display: inline-block; }
+    .group-body { border: 1px solid rgba(201,168,76,0.15); border-top: none; border-radius: 0 0 8px 8px; padding: 10px; background: rgba(255,255,255,0.01); margin-bottom: 8px; }
+
+    /* MATCH CARDS */
+    .match-card { background: #141a0f; border: 1px solid rgba(255,255,255,0.07); border-radius: 9px; padding: 12px; margin-bottom: 8px; position: relative; overflow: hidden; }
+    .match-card:last-child { margin-bottom: 0; }
+    .match-meta { font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.3); margin-bottom: 6px; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; }
+    .match-title { font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 800; color: #e8f0e0; margin-bottom: 10px; letter-spacing: 0.5px; }
+    .locked-badge { font-size: 9px; padding: 2px 6px; border-radius: 3px; background: rgba(248,113,113,0.15); color: #f87171; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; letter-spacing: 1px; }
+    .submitted-badge { font-size: 9px; padding: 2px 6px; border-radius: 3px; background: rgba(201,168,76,0.15); color: #c9a84c; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; letter-spacing: 1px; }
+
+    /* OUTCOME BUTTONS - GROUP STAGE */
+    .outcomes-group { display: flex; flex-direction: column; gap: 4px; }
+    .outcomes-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .outcomes-draw { display: grid; grid-template-columns: 1fr; gap: 4px; }
+    .outcome-btn { padding: 8px 3px; border-radius: 6px; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700; text-align: center; cursor: pointer; line-height: 1.2; border: 2px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.45); transition: all 0.15s; }
+    .outcome-btn:disabled { cursor: default; }
+    .outcome-btn:hover:not(:disabled):not(.selected) { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.7); }
+    .outcome-btn.draw-btn { background: rgba(201,168,76,0.08); border-color: rgba(201,168,76,0.2); color: rgba(201,168,76,0.6); }
+    .outcome-btn.draw-btn.selected { background: #c9a84c; border-color: #c9a84c; color: #000; }
+
+    /* OUTCOME BUTTONS - KNOCKOUT */
+    .outcomes-knockout { display: flex; flex-direction: column; gap: 4px; }
+    .outcomes-row-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+
+    /* SUBMIT BUTTON */
+    .submit-pick-btn { width: 100%; margin-top: 10px; padding: 9px; border-radius: 6px; background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.35); color: #4ade80; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; }
+    .submit-pick-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* RESULT BADGE */
+    .result-badge { margin-top: 10px; padding: 7px 10px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); font-size: 11px; color: rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: space-between; }
+    .result-badge strong { color: #e8f0e0; }
+    .pts-pos { color: #4ade80; font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 700; }
+    .pts-neg { color: #f87171; font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 700; }
+
+    /* STANDINGS */
+    .standings-table { background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid rgba(255,255,255,0.07); overflow: hidden; }
+    .standings-header { display: grid; grid-template-columns: 32px 1fr auto auto auto; gap: 0; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .standings-header span { font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,0.25); text-align: right; }
+    .standings-header span:nth-child(2) { text-align: left; }
+    .standings-row { display: grid; grid-template-columns: 32px 1fr auto auto auto; gap: 0; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); align-items: center; cursor: pointer; }
+    .standings-row:last-child { border-bottom: none; }
+    .standings-row.me { background: rgba(201,168,76,0.04); }
+    .s-rank { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; line-height: 1; }
+    .s-name { font-size: 13px; font-weight: 500; color: #e8f0e0; }
+    .s-sub { font-size: 10px; color: rgba(255,255,255,0.25); font-family: 'Barlow Condensed', sans-serif; font-weight: 700; letter-spacing: 0.5px; }
+    .s-grp { font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; text-align: right; padding-right: 6px; }
+    .s-ko { font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; text-align: right; padding: 0 6px; color: rgba(255,255,255,0.3); }
+    .s-total { font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 700; text-align: right; }
+
+    /* DISTRIBUTIONS */
+    .dist-card { background: #141a0f; border: 1px solid rgba(255,255,255,0.07); border-radius: 9px; overflow: hidden; margin-bottom: 8px; }
+    .dist-header { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: transparent; border: none; cursor: pointer; color: #e8f0e0; text-align: left; }
+    .dist-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0 12px; align-items: center; padding: 7px 14px; border-top: 1px solid rgba(255,255,255,0.04); }
+    .dist-swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; margin-right: 7px; border: 1px solid rgba(255,255,255,0.2); }
+
+    /* TOAST */
+    .toast { position: fixed; bottom: 80px; right: 16px; z-index: 9999; background: rgba(74,222,128,0.95); color: #000; padding: 10px 16px; border-radius: 8px; font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; }
+    .toast-error { background: rgba(248,113,113,0.95); color: #fff; }
+
+    /* ADMIN */
+    .admin-section { background: #141a0f; border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+    .admin-section-title { font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: rgba(255,255,255,0.4); margin-bottom: 10px; }
+    .lock-toggle { padding: 4px 10px; border-radius: 4px; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; border: none; cursor: pointer; }
+    .lock-toggle.unlocked { background: rgba(248,113,113,0.15); color: #f87171; }
+    .lock-toggle.locked-btn { background: rgba(74,222,128,0.15); color: #4ade80; }
+    .save-btn { padding: 5px 10px; border-radius: 5px; background: rgba(74,222,128,0.15); border: 1px solid rgba(74,222,128,0.3); color: #4ade80; font-size: 12px; cursor: pointer; font-family: 'Barlow', sans-serif; }
+
+    @media (min-width: 700px) {
+      .page { padding: 24px 20px; }
+      .page-title { font-size: 34px; }
+      .bottom-nav { max-width: 700px; left: 50%; transform: translateX(-50%); border-radius: 16px 16px 0 0; border-left: 1px solid rgba(255,255,255,0.08); border-right: 1px solid rgba(255,255,255,0.08); }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+const SUPABASE_URL = 'https://tawbzltnicvdgxlzfzsw.supabase.co'
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhd2J6bHRuaWN2ZGd4bHpmenN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2NzQ2OTMsImV4cCI6MjA5NjI1MDY5M30.BsjXdF4eUo2Fi58h1c6V3hvlSvucMGor0TGsFriL9J0'
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+// ─── SCORING ───────────────────────────────────────────────────────────────
+const STAGE_POINTS = {
+  group:  { winner: 4, bonus: 1 },
+  r32:    { winner: 6, bonus: 1 },
+  r16:    { winner: 7, bonus: 1 },
+  qf:     { winner: 9, bonus: 2 },
+  sf:     { winner: 10, bonus: 2 },
+  final:  { winner: 12, bonus: 2 },
+}
+
+const GROUP_OUTCOMES  = ['home_3plus','home_2','home_1','draw','away_1','away_2','away_3plus']
+const KNOCKOUT_OUTCOMES = ['home_3plus','home_2','home_1','home_pks','away_pks','away_1','away_2','away_3plus']
+
+function getOutcomeList(stage) {
+  return stage === 'group' ? GROUP_OUTCOMES : KNOCKOUT_OUTCOMES
+}
+
+function getSide(outcome) {
+  if (outcome === 'draw') return 'draw'
+  if (outcome.startsWith('home')) return 'home'
+  return 'away'
+}
+
+function calcPoints(stage, picked, actual) {
+  if (!actual) return null
+  const outcomes = getOutcomeList(stage)
+  const pickedIdx = outcomes.indexOf(picked)
+  const actualIdx = outcomes.indexOf(actual)
+  if (pickedIdx === -1 || actualIdx === -1) return 0
+  const dist = Math.abs(pickedIdx - actualIdx)
+  const { winner, bonus } = STAGE_POINTS[stage] || STAGE_POINTS.group
+  const pickedSide = getSide(picked)
+  const actualSide = getSide(actual)
+  const correctSide = pickedSide === actualSide
+  if (dist === 0) return winner + bonus
+  if (correctSide) {
+    return Math.max(-4, winner - Math.max(0, dist - 1))
+  } else {
+    return Math.max(-4, -(dist - 1))
+  }
+}
+
+// ─── TEAM COLORS ───────────────────────────────────────────────────────────
+const TEAM_COLORS = {
+  'Mexico':           { bg: '#006847', border: '#CE1126', text: '#fff' },
+  'South Africa':     { bg: '#007A4D', border: '#FFB81C', text: '#fff' },
+  'South Korea':      { bg: '#FFFFFF', border: '#CD2E3A', text: '#0047A0' },
+  'Czechia':          { bg: '#D7141A', border: '#11457E', text: '#fff' },
+  'Canada':           { bg: '#FF0000', border: '#FFFFFF', text: '#fff' },
+  'Bosnia & Herzegovina': { bg: '#002395', border: '#FCDD09', text: '#fff' },
+  'Qatar':            { bg: '#8D1B3D', border: '#FFFFFF', text: '#fff' },
+  'Switzerland':      { bg: '#D52B1E', border: '#FFFFFF', text: '#fff' },
+  'Brazil':           { bg: '#009C3B', border: '#FFDF00', text: '#fff' },
+  'Morocco':          { bg: '#C1272D', border: '#006233', text: '#fff' },
+  'Haiti':            { bg: '#00209F', border: '#D21034', text: '#fff' },
+  'Scotland':         { bg: '#003082', border: '#FFFFFF', text: '#fff' },
+  'USA':              { bg: '#3C3B6E', border: '#B22234', text: '#fff' },
+  'Paraguay':         { bg: '#D52B1E', border: '#FFFFFF', text: '#fff' },
+  'Australia':        { bg: '#00843D', border: '#FFCD00', text: '#fff' },
+  'Türkiye':          { bg: '#E30A17', border: '#FFFFFF', text: '#fff' },
+  'Germany':          { bg: '#000000', border: '#DD0000', text: '#fff' },
+  'Curaçao':          { bg: '#003DA5', border: '#F9C023', text: '#fff' },
+  'Ivory Coast':      { bg: '#F77F00', border: '#009A44', text: '#000' },
+  'Ecuador':          { bg: '#FFD100', border: '#003DA5', text: '#000' },
+  'Netherlands':      { bg: '#FF4F00', border: '#FFFFFF', text: '#fff' },
+  'Japan':            { bg: '#FFFFFF', border: '#BC002D', text: '#BC002D' },
+  'Sweden':           { bg: '#006AA7', border: '#FECC02', text: '#fff' },
+  'Tunisia':          { bg: '#E70013', border: '#FFFFFF', text: '#fff' },
+  'Belgium':          { bg: '#EF3340', border: '#000000', text: '#fff' },
+  'Egypt':            { bg: '#CE1126', border: '#FFFFFF', text: '#fff' },
+  'Iran':             { bg: '#239F40', border: '#DA0000', text: '#fff' },
+  'New Zealand':      { bg: '#000000', border: '#FFFFFF', text: '#fff' },
+  'Spain':            { bg: '#AA151B', border: '#F1BF00', text: '#fff' },
+  'Cape Verde':       { bg: '#003893', border: '#CF2027', text: '#fff' },
+  'Saudi Arabia':     { bg: '#006C35', border: '#FFFFFF', text: '#fff' },
+  'Uruguay':          { bg: '#5EB6E4', border: '#FFFFFF', text: '#fff' },
+  'France':           { bg: '#0055A4', border: '#EF4135', text: '#fff' },
+  'Senegal':          { bg: '#00853F', border: '#FDEF42', text: '#fff' },
+  'Iraq':             { bg: '#CE1126', border: '#FFFFFF', text: '#fff' },
+  'Norway':           { bg: '#EF2B2D', border: '#002868', text: '#fff' },
+  'Argentina':        { bg: '#74ACDF', border: '#FFFFFF', text: '#fff' },
+  'Algeria':          { bg: '#006233', border: '#FFFFFF', text: '#fff' },
+  'Austria':          { bg: '#ED2939', border: '#FFFFFF', text: '#fff' },
+  'Jordan':           { bg: '#007A3D', border: '#000000', text: '#fff' },
+  'Portugal':         { bg: '#006600', border: '#FF0000', text: '#fff' },
+  'DR Congo':         { bg: '#007FFF', border: '#F7D618', text: '#fff' },
+  'Uzbekistan':       { bg: '#1EB53A', border: '#0099B5', text: '#fff' },
+  'Colombia':         { bg: '#FCD116', border: '#003087', text: '#000' },
+  'England':          { bg: '#CF081F', border: '#FFFFFF', text: '#fff' },
+  'Croatia':          { bg: '#171796', border: '#FF0000', text: '#fff' },
+  'Ghana':            { bg: '#006B3F', border: '#FCD116', text: '#fff' },
+  'Panama':           { bg: '#DA121A', border: '#FFFFFF', text: '#fff' },
+}
+
+const TEAM_ABBR = {
+  'Mexico': 'MEX', 'South Africa': 'RSA', 'South Korea': 'KOR', 'Czechia': 'CZE',
+  'Canada': 'CAN', 'Bosnia & Herzegovina': 'BIH', 'Qatar': 'QAT', 'Switzerland': 'SUI',
+  'Brazil': 'BRA', 'Morocco': 'MAR', 'Haiti': 'HAI', 'Scotland': 'SCO',
+  'USA': 'USA', 'Paraguay': 'PAR', 'Australia': 'AUS', 'Türkiye': 'TUR',
+  'Germany': 'GER', 'Curaçao': 'CUW', 'Ivory Coast': 'CIV', 'Ecuador': 'ECU',
+  'Netherlands': 'NED', 'Japan': 'JPN', 'Sweden': 'SWE', 'Tunisia': 'TUN',
+  'Belgium': 'BEL', 'Egypt': 'EGY', 'Iran': 'IRN', 'New Zealand': 'NZL',
+  'Spain': 'ESP', 'Cape Verde': 'CPV', 'Saudi Arabia': 'KSA', 'Uruguay': 'URU',
+  'France': 'FRA', 'Senegal': 'SEN', 'Iraq': 'IRQ', 'Norway': 'NOR',
+  'Argentina': 'ARG', 'Algeria': 'ALG', 'Austria': 'AUT', 'Jordan': 'JOR',
+  'Portugal': 'POR', 'DR Congo': 'COD', 'Uzbekistan': 'UZB', 'Colombia': 'COL',
+  'England': 'ENG', 'Croatia': 'CRO', 'Ghana': 'GHA', 'Panama': 'PAN',
+}
+
+// ─── STATE ─────────────────────────────────────────────────────────────────
+let state = {
+  user: null,
+  page: 'picks',
+  matches: [],
+  userPicks: {},
+  pendingPicks: {},
+  participants: [],
+  allPicks: [],
+  toast: null,
+  toastTimer: null,
+  loading: false,
+  openGroups: {},
+  activeStage: 'group',
+  openDistGroups: {},
+  activeDistStage: 'group',
+  adminTab: 'matches',
+  resultInputs: {},
+  isRegister: false,
+  loginName: '',
+  loginPhone: '',
+  loginPin: ['','','',''],
+  loginError: '',
+}
+
+function setState(patch) {
+  Object.assign(state, patch)
+  render()
+}
+
+function showToast(msg, type = 'success') {
+  if (state.toastTimer) clearTimeout(state.toastTimer)
+  const timer = setTimeout(() => setState({ toast: null, toastTimer: null }), 3000)
+  setState({ toast: { msg, type }, toastTimer: timer })
+}
+
+// ─── SUPABASE ──────────────────────────────────────────────────────────────
+async function loadData() {
+  const [{ data: matches }, { data: picks }, { data: users }] = await Promise.all([
+    sb.from('matches').select('*').order('kickoff_time'),
+    sb.from('picks').select('*'),
+    sb.from('users').select('*'),
+  ])
+
+  const userPicks = {}
+  if (picks && state.user) {
+    picks.filter(p => p.user_id === state.user.id).forEach(p => {
+      userPicks[p.match_id] = p.picked_outcome
+    })
+  }
+
+  const participants = (users || []).map(u => {
+    let groupPts = 0, koPts = 0
+    ;(matches || []).forEach(m => {
+      if (!m.result) return
+      const pick = (picks || []).find(p => p.user_id === u.id && p.match_id === m.id)
+      const pts = pick ? calcPoints(m.stage, pick.picked_outcome, m.result) : -4
+      if (m.stage === 'group') groupPts += pts
+      else koPts += pts
+    })
+    return { ...u, groupPts, koPts, total: groupPts + koPts }
+  }).sort((a, b) => b.total - a.total)
+
+  const maxGroup = Math.max(...(matches || []).filter(m => m.stage === 'group').map(m => m.group_name ? 1 : 0), 0)
+
+  // default open first group
+  const openGroups = { ...state.openGroups }
+  if (Object.keys(openGroups).length === 0 && matches && matches.length > 0) {
+    const firstGroup = matches.find(m => m.stage === 'group')?.group_name
+    if (firstGroup) openGroups[firstGroup] = true
+  }
+
+  setState({ matches: matches || [], userPicks, participants, allPicks: picks || [], openGroups })
+}
+
+async function handleLogin(name, pin) {
+  setState({ loading: true, loginError: '' })
+  const { data, error } = await sb.from('users').select('*').eq('full_name', name).single()
+  if (error || !data) { setState({ loading: false, loginError: 'User not found' }); return }
+  if (data.pin_hash !== pin) { setState({ loading: false, loginError: 'Incorrect PIN' }); return }
+  setState({ user: data, loading: false })
+  loadData()
+}
+
+async function handleRegister(name, phone, pin) {
+  setState({ loading: true, loginError: '' })
+  const { data, error } = await sb.from('users').insert({ full_name: name, phone, pin_hash: pin }).select().single()
+  if (error) { setState({ loading: false, loginError: 'Registration failed. Name or phone may already exist.' }); return }
+  setState({ user: data, loading: false })
+  loadData()
+}
+
+async function submitPick(matchId) {
+  const picked = state.pendingPicks[matchId]
+  if (!picked) return
+  const { error } = await sb.from('picks').upsert(
+    { user_id: state.user.id, match_id: matchId, picked_outcome: picked },
+    { onConflict: 'user_id,match_id' }
+  )
+  if (!error) {
+    const userPicks = { ...state.userPicks, [matchId]: picked }
+    const pendingPicks = { ...state.pendingPicks }
+    delete pendingPicks[matchId]
+    setState({ userPicks, pendingPicks })
+    showToast('Pick submitted! ✓')
+    loadData()
+  }
+}
+
+async function toggleLock(matchId, current) {
+  await sb.from('matches').update({ locked: !current }).eq('id', matchId)
+  showToast(!current ? 'Match locked 🔒' : 'Match unlocked')
+  loadData()
+}
+
+async function enterResult(matchId, result) {
+  await sb.from('matches').update({ result, locked: true }).eq('id', matchId)
+  showToast('Result saved ✓')
+  loadData()
+}
+
+async function togglePayment(userId, current) {
+  await sb.from('users').update({ paid: !current }).eq('id', userId)
+  showToast(!current ? 'Marked as paid ✓' : 'Marked as unpaid')
+  loadData()
+}
+
+// Auto-lock
+setInterval(async () => {
+  const now = new Date()
+  const { data } = await sb.from('matches').select('*').eq('locked', false)
+  if (data) {
+    for (const m of data) {
+      if (m.kickoff_time && new Date(m.kickoff_time) <= now) {
+        await sb.from('matches').update({ locked: true }).eq('id', m.id)
+      }
+    }
+    loadData()
+  }
+}, 60000)
+
+// ─── OUTCOME LABEL ─────────────────────────────────────────────────────────
+function outcomeLabel(outcome, homeTeam, awayTeam) {
+  const ha = TEAM_ABBR[homeTeam] || homeTeam
+  const aa = TEAM_ABBR[awayTeam] || awayTeam
+  const map = {
+    home_3plus: `${ha} by 3+`,
+    home_2:     `${ha} by 2`,
+    home_1:     `${ha} by 1`,
+    home_pks:   `${ha} in PKs`,
+    draw:       'Draw',
+    away_pks:   `${aa} in PKs`,
+    away_1:     `${aa} by 1`,
+    away_2:     `${aa} by 2`,
+    away_3plus: `${aa} by 3+`,
+  }
+  return map[outcome] || outcome
+}
+
+// ─── RENDER ────────────────────────────────────────────────────────────────
+function render() {
+  const app = document.getElementById('app')
+  if (!app) return
+  if (!state.user) { app.innerHTML = renderLogin(); bindLogin(); return }
+  app.innerHTML = `
+    <div style="min-height:100vh; display:flex; flex-direction:column;">
+      ${renderTopbar()}
+      <main class="main-content" style="flex:1;">
+        ${renderPage()}
+      </main>
+      ${renderBottomNav()}
+      ${state.toast ? `<div class="toast ${state.toast.type === 'error' ? 'toast-error' : ''}">${state.toast.msg}</div>` : ''}
+    </div>
+  `
+  bindEvents()
+}
+
+function renderTopbar() {
+  return `
+    <header class="topbar">
+      <div class="topbar-logo">
+        <span class="topbar-year">2026</span>
+        <span class="topbar-title">World Cup Pool</span>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-user"><strong>${state.user.full_name}</strong></span>
+        <button class="signout-btn" id="signout-btn">Sign Out</button>
+      </div>
+    </header>
+  `
+}
+
+function renderBottomNav() {
+  const items = [
+    { key: 'picks', label: 'Picks', icon: '⚽' },
+    { key: 'standings', label: 'Standings', icon: '🏆' },
+    { key: 'distributions', label: 'Distrib.', icon: '📊' },
+    { key: 'scoring', label: 'Scoring', icon: '📋' },
+    ...(state.user?.is_admin ? [{ key: 'admin', label: 'Admin', icon: '⚙️' }] : []),
+  ]
+  return `
+    <nav class="bottom-nav">
+      ${items.map(item => `
+        <button class="bnav-item ${state.page === item.key ? 'bnav-active' : ''}" data-page="${item.key}">
+          <span class="bnav-icon">${item.icon}</span>
+          <span class="bnav-label">${item.label}</span>
+        </button>
+      `).join('')}
+    </nav>
+  `
+}
+
+function renderPage() {
+  if (state.page === 'picks') return renderPicksPage()
+  if (state.page === 'standings') return renderStandingsPage()
+  if (state.page === 'distributions') return renderDistributionsPage()
+  if (state.page === 'scoring') return renderScoringPage()
+  if (state.page === 'admin' && state.user?.is_admin) return renderAdminPage()
+  return ''
+}
+
+function renderLogin() {
+  const isReg = state.isRegister
+  return `
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="login-year-badge">2026</div>
+        <div class="login-title">World Cup Pool</div>
+        <div class="login-sub">FIFA World Cup 2026</div>
+        <div class="login-toggle">
+          <button class="toggle-btn ${!isReg ? 'active' : ''}" id="login-tab">Sign In</button>
+          <button class="toggle-btn ${isReg ? 'active' : ''}" id="register-tab">Register</button>
+        </div>
+        ${state.loginError ? `<div class="error-msg">${state.loginError}</div>` : ''}
+        <div class="field-label">Full Name</div>
+        <input class="field-input" id="login-name" placeholder="e.g. Alex Thompson" value="${state.loginName}" />
+        ${isReg ? `<div class="field-label">Phone Number</div><input class="field-input" id="login-phone" placeholder="(555) 000-0000" value="${state.loginPhone}" />` : ''}
+        <div class="field-label">4-Digit PIN</div>
+        <div class="pin-row">
+          ${state.loginPin.map((d, i) => `<input class="pin-input" id="pin-${i}" type="password" inputmode="numeric" maxlength="1" value="${d}" />`).join('')}
+        </div>
+        <button class="btn-primary" id="login-submit" ${state.loading ? 'disabled' : ''}>
+          ${state.loading ? 'Please wait...' : isReg ? 'Create Account' : 'Sign In'}
+        </button>
+      </div>
+    </div>
+  `
+}
+</script>
+// ─── PICKS PAGE ────────────────────────────────────────────────────────────
+function renderPicksPage() {
+  const stages = ['group', 'r32', 'r16', 'qf', 'sf', 'final']
+  const stageLabels = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', final: 'Final' }
+  const availableStages = [...new Set(state.matches.map(m => m.stage))].sort((a,b) => stages.indexOf(a) - stages.indexOf(b))
+
+  const activeStage = state.activeStage || 'group'
+  const stageMatches = state.matches.filter(m => m.stage === activeStage)
+
+  let content = ''
+  if (activeStage === 'group') {
+    const groups = [...new Set(stageMatches.map(m => m.group_name))].sort()
+    content = groups.map(g => {
+      const gMatches = stageMatches.filter(m => m.group_name === g).sort((a,b) => new Date(a.kickoff_time) - new Date(b.kickoff_time))
+      const isOpen = !!state.openGroups[g]
+      return `
+        <div style="margin-bottom:8px;">
+          <div class="group-header ${isOpen ? 'open' : ''}" data-toggle-group="${g}">
+            <span class="group-header-label">Group ${g}</span>
+            <span class="group-arrow" style="transform:${isOpen ? 'rotate(180deg)' : 'rotate(0deg)'}">▾</span>
+          </div>
+          ${isOpen ? `<div class="group-body">${gMatches.map(m => renderMatchCard(m)).join('')}</div>` : ''}
+        </div>
+      `
+    }).join('')
+  } else {
+    content = stageMatches.map(m => renderMatchCard(m)).join('')
+  }
+
+  return `
+    <div class="page">
+      <div class="page-title">My Picks</div>
+      <div class="page-sub">Picks lock automatically at kickoff.</div>
+      <div class="stage-tabs">
+        ${availableStages.map(s => `
+          <button class="stage-tab ${activeStage === s ? 'active' : ''}" data-stage="${s}">${stageLabels[s]}</button>
+        `).join('')}
+      </div>
+      ${content || '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No matches yet.</div>'}
+    </div>
+  `
+}
+
+function renderMatchCard(m) {
+  const pick = state.pendingPicks[m.id] || state.userPicks[m.id] || null
+  const submitted = !!state.userPicks[m.id] && !state.pendingPicks[m.id]
+  const isGroup = m.stage === 'group'
+  const outcomes = getOutcomeList(m.stage)
+  const hc = TEAM_COLORS[m.home_team] || { bg: '#333', border: '#555', text: '#fff' }
+  const ac = TEAM_COLORS[m.away_team] || { bg: '#333', border: '#555', text: '#fff' }
+  const ha = TEAM_ABBR[m.home_team] || m.home_team
+  const aa = TEAM_ABBR[m.away_team] || m.away_team
+
+  const kickoff = m.kickoff_time ? new Date(m.kickoff_time).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
+  }) : 'TBD'
+
+  let pts = null
+  if (state.userPicks[m.id] && m.result) {
+    pts = calcPoints(m.stage, state.userPicks[m.id], m.result)
+  }
+
+  function btnStyle(outcome) {
+    const isSelected = pick === outcome
+    const isHome = outcome.startsWith('home')
+    const isAway = outcome.startsWith('away')
+    const isDraw = outcome === 'draw'
+    const tc = isHome ? hc : isAway ? ac : null
+    if (isSelected && tc) {
+      return `background:${tc.bg}; border-color:${tc.border}; color:${tc.text};`
+    }
+    if (isSelected && isDraw) {
+      return `background:#c9a84c; border-color:#c9a84c; color:#000;`
+    }
+    if (isHome) return `background:${hc.bg}22; border-color:${hc.border}55; color:${hc.text === '#000' ? hc.bg : hc.bg};`
+    if (isAway) return `background:${ac.bg}22; border-color:${ac.border}55; color:${ac.text === '#000' ? ac.bg : ac.bg};`
+    return ''
+  }
+
+  function renderOutcomeBtn(outcome) {
+    const label = outcomeLabel(outcome, m.home_team, m.away_team)
+    const disabled = m.locked ? 'disabled' : ''
+    return `<button class="outcome-btn ${pick === outcome ? 'selected' : ''} ${outcome === 'draw' ? 'draw-btn' : ''}"
+      style="${btnStyle(outcome)}"
+      data-match="${m.id}" data-outcome="${outcome}" ${disabled}>${label}</button>`
+  }
+
+  let outcomesHtml = ''
+  if (isGroup) {
+    outcomesHtml = `
+      <div class="outcomes-group">
+        <div class="outcomes-row">
+          ${renderOutcomeBtn('home_3plus')}
+          ${renderOutcomeBtn('home_2')}
+          ${renderOutcomeBtn('home_1')}
+        </div>
+        <div class="outcomes-draw">
+          ${renderOutcomeBtn('draw')}
+        </div>
+        <div class="outcomes-row">
+          ${renderOutcomeBtn('away_1')}
+          ${renderOutcomeBtn('away_2')}
+          ${renderOutcomeBtn('away_3plus')}
+        </div>
+      </div>
+    `
+  } else {
+    outcomesHtml = `
+      <div class="outcomes-knockout">
+        <div class="outcomes-row-4">
+          ${renderOutcomeBtn('home_3plus')}
+          ${renderOutcomeBtn('home_2')}
+          ${renderOutcomeBtn('home_1')}
+          ${renderOutcomeBtn('home_pks')}
+        </div>
+        <div class="outcomes-row-4">
+          ${renderOutcomeBtn('away_pks')}
+          ${renderOutcomeBtn('away_1')}
+          ${renderOutcomeBtn('away_2')}
+          ${renderOutcomeBtn('away_3plus')}
+        </div>
+      </div>
+    `
+  }
+
+  return `
+    <div class="match-card" style="${m.locked ? 'opacity:0.85;' : ''}">
+      <div class="match-meta">
+        <span>${kickoff} ET</span>
+        <span>
+          ${m.locked ? '<span class="locked-badge">LOCKED</span>' : ''}
+          ${submitted && !m.locked ? '<span class="submitted-badge">SUBMITTED</span>' : ''}
+        </span>
+      </div>
+      <div class="match-title">${m.home_team} vs ${m.away_team}</div>
+      ${outcomesHtml}
+      ${m.result ? `
+        <div class="result-badge">
+          <span>Result: <strong>${outcomeLabel(m.result, m.home_team, m.away_team)}</strong></span>
+          ${pts !== null ? `<span class="${pts >= 0 ? 'pts-pos' : 'pts-neg'}">${pts}</span>` : ''}
+        </div>
+      ` : !m.locked ? `
+        <button class="submit-pick-btn" data-submit="${m.id}" ${!state.pendingPicks[m.id] ? 'disabled' : ''}>
+          ${state.userPicks[m.id] ? 'Update Pick' : 'Submit Pick'}
+        </button>
+      ` : ''}
+    </div>
+  `
+}
+
+// ─── STANDINGS PAGE ────────────────────────────────────────────────────────
+function renderStandingsPage() {
+  const sorted = [...state.participants].sort((a,b) => b.total - a.total)
+
+  function getMedal(rank) {
+    if (rank === 1) return '🥇'
+    if (rank === 2) return '🥈'
+    if (rank === 3) return '🥉'
+    return rank
+  }
+
+  const rows = sorted.map((p, i) => {
+    const rank = i + 1
+    const medal = getMedal(rank)
+    const isMe = p.id === state.user?.id
+    const scoreColor = p.total >= 0 ? '#4ade80' : '#f87171'
+    const grpColor = p.groupPts >= 0 ? '#4ade80' : '#f87171'
+    const koColor = p.koPts >= 0 ? '#4ade80' : '#f87171'
+    return `
+      <div class="standings-row ${isMe ? 'me' : ''}">
+        <div class="s-rank" style="color:${rank===1?'#c9a84c':rank===2?'#94a3b8':rank===3?'#b87333':'rgba(255,255,255,0.2)'}">${medal}</div>
+        <div>
+          <div class="s-name" style="${isMe ? 'color:#c9a84c;' : ''}">${p.full_name}${isMe ? ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(201,168,76,0.2);color:#c9a84c;font-family:Barlow Condensed,sans-serif;font-weight:700;">YOU</span>' : ''}</div>
+        </div>
+        <div class="s-grp" style="color:${grpColor};">${p.groupPts}</div>
+        <div class="s-ko" style="color:${koColor};">+ ${p.koPts}</div>
+        <div class="s-total" style="color:${scoreColor};">${p.total}</div>
+      </div>
+    `
+  }).join('')
+
+  return `
+    <div class="page">
+      <div class="page-title">Standings</div>
+      <div class="page-sub">Group pts + Knockout pts = Total</div>
+      <div class="standings-table">
+        <div class="standings-header">
+          <span style="text-align:left;">#</span>
+          <span style="text-align:left;">Name</span>
+          <span>Grp</span>
+          <span>KO</span>
+          <span>Total</span>
+        </div>
+        ${rows || '<div style="padding:16px;color:rgba(255,255,255,0.3);font-size:13px;">No participants yet.</div>'}
+      </div>
+    </div>
+  `
+}
+
+// ─── DISTRIBUTIONS PAGE ────────────────────────────────────────────────────
+function renderDistributionsPage() {
+  const stages = ['group', 'r32', 'r16', 'qf', 'sf', 'final']
+  const stageLabels = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', final: 'Final' }
+  const availableStages = [...new Set(state.matches.filter(m => m.locked).map(m => m.stage))].sort((a,b) => stages.indexOf(a) - stages.indexOf(b))
+  const activeStage = state.activeDistStage || 'group'
+  const stageMatches = state.matches.filter(m => m.stage === activeStage && m.locked)
+
+  let content = ''
+  if (activeStage === 'group') {
+    const groups = [...new Set(stageMatches.map(m => m.group_name))].sort()
+    content = groups.map(g => {
+      const gMatches = stageMatches.filter(m => m.group_name === g)
+      const isOpen = !!state.openDistGroups[g]
+      return `
+        <div style="margin-bottom:8px;">
+          <div class="group-header ${isOpen ? 'open' : ''}" data-toggle-dist-group="${g}">
+            <span class="group-header-label">Group ${g}</span>
+            <span class="group-arrow" style="transform:${isOpen ? 'rotate(180deg)' : 'rotate(0deg)'}">▾</span>
+          </div>
+          ${isOpen ? `<div class="group-body">${gMatches.map(m => renderDistCard(m)).join('')}</div>` : ''}
+        </div>
+      `
+    }).join('')
+  } else {
+    content = stageMatches.map(m => renderDistCard(m)).join('')
+  }
+
+  return `
+    <div class="page">
+      <div class="page-title">Distributions</div>
+      <div class="page-sub">How the pool split on each match.</div>
+      <div class="stage-tabs">
+        ${availableStages.map(s => `
+          <button class="stage-tab ${activeStage === s ? 'active' : ''}" data-dist-stage="${s}">${stageLabels[s]}</button>
+        `).join('')}
+      </div>
+      ${content || '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No locked matches yet.</div>'}
+    </div>
+  `
+}
+
+function renderDistCard(m) {
+  const matchPicks = state.allPicks.filter(p => p.match_id === m.id)
+  const total = state.participants.length
+  const outcomes = getOutcomeList(m.stage)
+  const isOpen = !!state.openDistGroups[`dist-${m.id}`]
+
+  const counts = {}
+  outcomes.forEach(o => counts[o] = 0)
+  matchPicks.forEach(p => { if (counts[p.picked_outcome] !== undefined) counts[p.picked_outcome]++ })
+  const noPicks = total - matchPicks.length
+
+  const hc = TEAM_COLORS[m.home_team] || { bg: '#333', border: '#555', text: '#fff' }
+  const ac = TEAM_COLORS[m.away_team] || { bg: '#333', border: '#555', text: '#fff' }
+
+  return `
+    <div class="dist-card">
+      <button class="dist-header" data-toggle-dist-match="${m.id}">
+        <div style="flex:1;">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:#e8f0e0;margin-bottom:2px;">${m.home_team} vs ${m.away_team}</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.35);">
+            ${matchPicks.length}/${total} picks
+            ${m.result ? `<span style="color:#4ade80;margin-left:6px;">· ${outcomeLabel(m.result, m.home_team, m.away_team)}</span>` : '<span style="color:#c9a84c;margin-left:6px;">· In progress</span>'}
+          </div>
+        </div>
+        <span style="color:rgba(255,255,255,0.3);font-size:14px;transform:${isOpen ? 'rotate(180deg)' : 'rotate(0deg)'};display:inline-block;transition:transform 0.2s;">▾</span>
+      </button>
+      ${isOpen ? `
+        <div style="padding:0 14px 14px;">
+          <div style="display:grid;grid-template-columns:1fr auto auto;gap:0 12px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.3);">Outcome</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.3);text-align:right;">Picks</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.3);text-align:right;">%</div>
+          </div>
+          ${outcomes.map(o => {
+            const cnt = counts[o]
+            const pct = total > 0 ? Math.round((cnt / total) * 100) : 0
+            const isHome = o.startsWith('home')
+            const isAway = o.startsWith('away')
+            const tc = isHome ? hc : isAway ? ac : null
+            const swatchColor = tc ? tc.bg : '#c9a84c'
+            const swatchBorder = tc ? tc.border : '#a07830'
+            const isResult = m.result === o
+            return `
+              <div style="display:grid;grid-template-columns:1fr auto auto;gap:0 12px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div style="width:11px;height:11px;border-radius:3px;background:${swatchColor};border:2px solid ${swatchBorder};flex-shrink:0;"></div>
+                  <span style="font-size:13px;color:${isResult ? '#4ade80' : 'rgba(255,255,255,0.65)'};">${outcomeLabel(o, m.home_team, m.away_team)}${isResult ? ' ✓' : ''}</span>
+                </div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:#fff;text-align:right;">${cnt}</div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:${isResult ? '#4ade80' : pct > 0 ? '#c9a84c' : 'rgba(255,255,255,0.2)'};text-align:right;min-width:36px;">${pct}%</div>
+              </div>
+            `
+          }).join('')}
+          ${noPicks > 0 ? `
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:0 12px;align-items:center;padding:7px 0;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div style="width:11px;height:11px;border-radius:3px;background:#374151;border:2px solid #6b7280;flex-shrink:0;"></div>
+                <span style="font-size:13px;color:rgba(255,255,255,0.65);">No Pick</span>
+              </div>
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:#fff;text-align:right;">${noPicks}</div>
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:rgba(255,255,255,0.2);text-align:right;min-width:36px;">${Math.round((noPicks/total)*100)}%</div>
+            </div>
+          ` : ''}
+        </div>
+      ` : ''}
+    </div>
+  `
+}
+
+// ─── SCORING PAGE ──────────────────────────────────────────────────────────
+function renderScoringPage() {
+  const stages = [
+    { key: 'group', name: 'Group Stage', winner: 4, bonus: 1 },
+    { key: 'r32',   name: 'Round of 32', winner: 6, bonus: 1 },
+    { key: 'r16',   name: 'Round of 16', winner: 7, bonus: 1 },
+    { key: 'qf',    name: 'Quarterfinals', winner: 9, bonus: 2 },
+    { key: 'sf',    name: 'Semifinals', winner: 10, bonus: 2 },
+    { key: 'final', name: 'Final', winner: 12, bonus: 2 },
+  ]
+  return `
+    <div class="page">
+      <div class="page-title">Scoring</div>
+      <div class="page-sub">How points are calculated.</div>
+
+      <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:16px;margin-bottom:12px;text-align:center;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">Maximum Possible Score</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:48px;font-weight:800;color:#c9a84c;line-height:1;">618 <span style="font-size:18px;color:rgba(255,255,255,0.4);font-weight:400;">pts</span></div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">every pick correct with exact margin</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+        ${stages.map(s => `
+          <div style="background:#141a0f;border:1px solid rgba(255,255,255,0.07);border-radius:9px;padding:14px;">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#c9a84c;margin-bottom:2px;">${s.name}</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;color:#fff;line-height:1;">${s.winner} <span style="font-size:14px;color:rgba(255,255,255,0.3);">pts</span></div>
+            <div style="font-size:11px;color:#4ade80;margin-top:4px;font-weight:600;">+${s.bonus} exact bonus</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:10px;padding:16px;margin-bottom:12px;text-align:center;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">No Pick</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:48px;font-weight:800;color:#f87171;line-height:1;">−4 <span style="font-size:18px;color:rgba(255,255,255,0.4);font-weight:400;">pts</span></div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">applied to all unsubmitted picks after kickoff</div>
+      </div>
+
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3);margin-bottom:10px;">Distance Penalty</div>
+      <div style="background:#141a0f;border:1px solid rgba(255,255,255,0.07);border-radius:9px;overflow:hidden;margin-bottom:12px;">
+        ${[
+          ['Exact (dist. 0)', 'Winner + bonus', '+5 (group)'],
+          ['Off by 1', 'Winner pts', '+4 (group)'],
+          ['Off by 2', 'Winner − 1', '+3 (group)'],
+          ['Off by 3', 'Winner − 2', '+2 (group)'],
+          ['Off by 4', 'Winner − 3', '+1 (group)'],
+          ['Off by 5+', '−4 (cap)', '−4'],
+          ['Wrong side + dist 1', '0 pts', '0'],
+          ['Wrong side + dist 2', '−1 pts', '−1'],
+          ['Wrong side + dist 5+', '−4 (cap)', '−4'],
+        ].map(([d, correct, example], i, arr) => `
+          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:0 8px;padding:9px 12px;border-bottom:${i < arr.length-1 ? '1px solid rgba(255,255,255,0.04)' : 'none'};font-size:12px;">
+            <span style="color:rgba(255,255,255,0.5);">${d}</span>
+            <span style="color:#e8f0e0;">${correct}</span>
+            <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;color:#c9a84c;">${example}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `
+}
+
+// ─── ADMIN PAGE ────────────────────────────────────────────────────────────
+function renderAdminPage() {
+  const tabs = ['matches', 'results', 'payments']
+  const tabLabels = { matches: 'Matches', results: 'Results', payments: 'Payments' }
+  const activeTab = state.adminTab || 'matches'
+
+  let tabContent = ''
+  if (activeTab === 'matches') {
+    const stages = ['group','r32','r16','qf','sf','final']
+    const stageLabels = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', final: 'Final' }
+    tabContent = stages.map(s => {
+      const sm = state.matches.filter(m => m.stage === s)
+      if (!sm.length) return ''
+      return `
+        <div class="admin-section">
+          <div class="admin-section-title">${stageLabels[s]}</div>
+          ${sm.map(m => `
+            <div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div>
+                <div style="font-size:12px;color:#e8f0e0;">${m.home_team} vs ${m.away_team}</div>
+                <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:2px;">
+                  ${m.kickoff_time ? new Date(m.kickoff_time).toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZone:'America/New_York' }) : 'TBD'}
+                  ${m.result ? `<span style="color:#4ade80;margin-left:6px;">✓ ${outcomeLabel(m.result, m.home_team, m.away_team)}</span>` : ''}
+                </div>
+              </div>
+              <button class="lock-toggle ${m.locked ? 'locked-btn' : 'unlocked'}" data-lock="${m.id}" data-locked="${m.locked}">
+                ${m.locked ? 'Unlock' : 'Lock'}
+              </button>
+            </div>
+          `).join('')}
+        </div>
+      `
+    }).join('')
+  }
+
+  if (activeTab === 'results') {
+    const lockedNoResult = state.matches.filter(m => m.locked && !m.result)
+    tabContent = lockedNoResult.length === 0
+      ? '<div style="color:rgba(255,255,255,0.3);font-size:13px;padding:16px 0;">No locked matches without results.</div>'
+      : lockedNoResult.map(m => {
+          const outcomes = getOutcomeList(m.stage)
+          const ri = state.resultInputs[m.id] || ''
+          return `
+            <div class="admin-section">
+              <div style="font-size:13px;font-weight:600;color:#e8f0e0;margin-bottom:10px;">${m.home_team} vs ${m.away_team}</div>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <select style="flex:1;padding:6px 8px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:12px;font-family:'Barlow',sans-serif;" data-result-select="${m.id}">
+                  <option value="">Select result...</option>
+                  ${outcomes.map(o => `<option value="${o}" ${ri === o ? 'selected' : ''}>${outcomeLabel(o, m.home_team, m.away_team)}</option>`).join('')}
+                </select>
+                <button class="save-btn" data-save-result="${m.id}">Save</button>
+              </div>
+            </div>
+          `
+        }).join('')
+  }
+
+  if (activeTab === 'payments') {
+    const paidCount = state.participants.filter(p => p.paid).length
+    tabContent = `
+      <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:12px;">
+        <span style="color:#4ade80;font-weight:700;">${paidCount}</span> of <span style="color:#fff;font-weight:700;">${state.participants.length}</span> paid
+      </div>
+      <div style="background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;">
+        ${[...state.participants].sort((a,b) => a.full_name.localeCompare(b.full_name)).map((u, i, arr) => `
+          <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:${i < arr.length-1 ? '1px solid rgba(255,255,255,0.04)' : 'none'};">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;color:#e8f0e0;">${u.full_name}</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:1px;">${u.phone || 'No phone'}</div>
+            </div>
+            <button data-payment="${u.id}" data-paid="${u.paid}" style="padding:6px 16px;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;border:none;cursor:pointer;background:${u.paid ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)'};color:${u.paid ? '#4ade80' : '#f87171'};">
+              ${u.paid ? '✓ Paid' : 'Unpaid'}
+            </button>
+          </div>
+        `).join('')}
+      </div>
+    `
+  }
+
+  return `
+    <div class="page">
+      <div class="page-title">Admin</div>
+      <div class="page-sub">Manage matches, results, and payments.</div>
+      <div class="stage-tabs" style="margin-bottom:16px;">
+        ${tabs.map(t => `<button class="stage-tab ${activeTab === t ? 'active' : ''}" data-admin-tab="${t}">${tabLabels[t]}</button>`).join('')}
+      </div>
+      ${tabContent}
+    </div>
+  `
+}
+
+// ─── EVENT BINDING ─────────────────────────────────────────────────────────
+function bindLogin() {
+  document.getElementById('login-tab')?.addEventListener('click', () => setState({ isRegister: false, loginError: '' }))
+  document.getElementById('register-tab')?.addEventListener('click', () => setState({ isRegister: true, loginError: '' }))
+  document.getElementById('login-name')?.addEventListener('input', e => state.loginName = e.target.value)
+  document.getElementById('login-phone')?.addEventListener('input', e => state.loginPhone = e.target.value)
+
+  for (let i = 0; i < 4; i++) {
+    const input = document.getElementById(`pin-${i}`)
+    if (!input) continue
+    input.addEventListener('input', e => {
+      const val = e.target.value.replace(/\D/g, '').slice(-1)
+      e.target.value = val
+      state.loginPin[i] = val
+      if (val && i < 3) document.getElementById(`pin-${i+1}`)?.focus()
+    })
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !state.loginPin[i] && i > 0) document.getElementById(`pin-${i-1}`)?.focus()
+    })
+  }
+
+  document.getElementById('login-submit')?.addEventListener('click', () => {
+    const name = state.loginName.trim()
+    const pin = state.loginPin.join('')
+    if (!name) { setState({ loginError: 'Please enter your name' }); return }
+    if (pin.length < 4) { setState({ loginError: 'Please enter your 4-digit PIN' }); return }
+    if (state.isRegister) handleRegister(name, state.loginPhone.trim(), pin)
+    else handleLogin(name, pin)
+  })
+}
+
+function bindEvents() {
+  // Sign out
+  document.getElementById('signout-btn')?.addEventListener('click', () => {
+    setState({ user: null, page: 'picks', matches: [], userPicks: {}, pendingPicks: {}, participants: [], allPicks: [], loginPin: ['','','',''], loginName: '', loginPhone: '', loginError: '' })
+  })
+
+  // Bottom nav
+  document.querySelectorAll('[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => setState({ page: btn.dataset.page }))
+  })
+
+  // Stage tabs (picks)
+  document.querySelectorAll('[data-stage]').forEach(btn => {
+    btn.addEventListener('click', () => setState({ activeStage: btn.dataset.stage }))
+  })
+
+  // Stage tabs (distributions)
+  document.querySelectorAll('[data-dist-stage]').forEach(btn => {
+    btn.addEventListener('click', () => setState({ activeDistStage: btn.dataset.distStage }))
+  })
+
+  // Group toggles (picks)
+  document.querySelectorAll('[data-toggle-group]').forEach(el => {
+    el.addEventListener('click', () => {
+      const g = el.dataset.toggleGroup
+      setState({ openGroups: { ...state.openGroups, [g]: !state.openGroups[g] } })
+    })
+  })
+
+  // Group toggles (distributions)
+  document.querySelectorAll('[data-toggle-dist-group]').forEach(el => {
+    el.addEventListener('click', () => {
+      const g = el.dataset.toggleDistGroup
+      setState({ openDistGroups: { ...state.openDistGroups, [g]: !state.openDistGroups[g] } })
+    })
+  })
+
+  // Dist match toggles
+  document.querySelectorAll('[data-toggle-dist-match]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.toggleDistMatch
+      const key = `dist-${id}`
+      setState({ openDistGroups: { ...state.openDistGroups, [key]: !state.openDistGroups[key] } })
+    })
+  })
+
+  // Outcome buttons
+  document.querySelectorAll('[data-outcome]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const matchId = btn.dataset.match
+      const outcome = btn.dataset.outcome
+      setState({ pendingPicks: { ...state.pendingPicks, [matchId]: outcome } })
+    })
+  })
+
+  // Submit pick
+  document.querySelectorAll('[data-submit]').forEach(btn => {
+    btn.addEventListener('click', () => submitPick(btn.dataset.submit))
+  })
+
+  // Admin tabs
+  document.querySelectorAll('[data-admin-tab]').forEach(btn => {
+    btn.addEventListener('click', () => setState({ adminTab: btn.dataset.adminTab }))
+  })
+
+  // Lock toggles
+  document.querySelectorAll('[data-lock]').forEach(btn => {
+    btn.addEventListener('click', () => toggleLock(btn.dataset.lock, btn.dataset.locked === 'true'))
+  })
+
+  // Result selects
+  document.querySelectorAll('[data-result-select]').forEach(sel => {
+    sel.addEventListener('change', e => {
+      state.resultInputs[sel.dataset.resultSelect] = e.target.value
+    })
+  })
+
+  // Save result
+  document.querySelectorAll('[data-save-result]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.saveResult
+      const result = state.resultInputs[id]
+      if (result) enterResult(id, result)
+      else showToast('Please select a result', 'error')
+    })
+  })
+
+  // Payments
+  document.querySelectorAll('[data-payment]').forEach(btn => {
+    btn.addEventListener('click', () => togglePayment(btn.dataset.payment, btn.dataset.paid === 'true'))
+  })
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────
+render()
+</script>
+</body>
+</html>
