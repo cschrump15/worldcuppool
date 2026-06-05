@@ -512,23 +512,48 @@ function renderPicksPage() {
   const stageMatches = state.matches.filter(m => m.stage === activeStage)
 
   let content = ''
+  const now = new Date()
   if (activeStage === 'group') {
-    const groups = [...new Set(stageMatches.map(m => m.group_name))].sort()
-    content = groups.map(g => {
-      const gMatches = stageMatches.filter(m => m.group_name === g).sort((a,b) => new Date(a.kickoff_time) - new Date(b.kickoff_time))
-      const isOpen = !!state.openGroups[g]
-      return `
-        <div style="margin-bottom:8px;">
-          <div class="group-header ${isOpen ? 'open' : ''}" data-toggle-group="${g}">
-            <span class="group-header-label">Group ${g}</span>
-            <span class="group-arrow" style="transform:${isOpen ? 'rotate(180deg)' : 'rotate(0deg)'}">▾</span>
-          </div>
-          ${isOpen ? `<div class="group-body">${gMatches.map(m => renderMatchCard(m)).join('')}</div>` : ''}
-        </div>
-      `
-    }).join('')
+    const upcoming = stageMatches.filter(m => !m.locked).sort((a,b) => new Date(a.kickoff_time) - new Date(b.kickoff_time))
+    const past = stageMatches.filter(m => m.locked).sort((a,b) => new Date(b.kickoff_time) - new Date(a.kickoff_time))
+
+    // Group upcoming by date
+    const upcomingByDate = {}
+    upcoming.forEach(m => {
+      const dateKey = new Date(m.kickoff_time).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' })
+      if (!upcomingByDate[dateKey]) upcomingByDate[dateKey] = []
+      upcomingByDate[dateKey].push(m)
+    })
+
+    const upcomingHtml = Object.entries(upcomingByDate).map(([date, matches]) => `
+      <div style="margin-bottom: 16px;">
+        <div style="font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:#c9a84c; margin-bottom:8px; padding:0 2px;">${date}</div>
+        ${matches.map(m => renderMatchCard(m, true)).join('')}
+      </div>
+    `).join('')
+
+    const pastHtml = past.length > 0 ? `
+      <div style="margin: 24px 0 12px; display:flex; align-items:center; gap:10px;">
+        <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
+        <div style="font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,0.25);">Past Matches</div>
+        <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
+      </div>
+      ${past.map(m => renderMatchCard(m, true)).join('')}
+    ` : ''
+
+    content = (upcomingHtml || '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No upcoming matches.</div>') + pastHtml
   } else {
-    content = stageMatches.map(m => renderMatchCard(m)).join('')
+    const upcoming = stageMatches.filter(m => !m.locked).sort((a,b) => new Date(a.kickoff_time) - new Date(b.kickoff_time))
+    const past = stageMatches.filter(m => m.locked).sort((a,b) => new Date(b.kickoff_time) - new Date(a.kickoff_time))
+    const pastHtml = past.length > 0 ? `
+      <div style="margin: 24px 0 12px; display:flex; align-items:center; gap:10px;">
+        <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
+        <div style="font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,0.25);">Past Matches</div>
+        <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
+      </div>
+      ${past.map(m => renderMatchCard(m, true)).join('')}
+    ` : ''
+    content = upcoming.map(m => renderMatchCard(m, true)).join('') + pastHtml
   }
 
   return `
@@ -545,7 +570,7 @@ function renderPicksPage() {
   `
 }
 
-function renderMatchCard(m) {
+function renderMatchCard(m, showGroup = false) {
   const pick = state.pendingPicks[m.id] || state.userPicks[m.id] || null
   const submitted = !!state.userPicks[m.id] && !state.pendingPicks[m.id]
   const isGroup = m.stage === 'group'
@@ -636,6 +661,7 @@ function renderMatchCard(m) {
           ${submitted && !m.locked ? '<span class="submitted-badge">SUBMITTED</span>' : ''}
         </span>
       </div>
+      ${showGroup && m.group_name ? `<div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#c9a84c;margin-bottom:4px;">Group ${m.group_name}</div>` : ''}
       <div class="match-title">${m.home_team} vs ${m.away_team}</div>
       ${outcomesHtml}
       ${m.result ? `
