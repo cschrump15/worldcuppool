@@ -465,18 +465,9 @@ function renderMatchCard(m, showGroup) {
   const aa = TEAM_ABBR[m.away_team] || m.away_team
 
   const kickoffDate = m.kickoff_time ? new Date(m.kickoff_time) : null
-  const kickoff = kickoffDate ? (() => {
-    const str = kickoffDate.toLocaleDateString('en-US', {
-      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
-    })
-    if (str.includes('12:00 AM')) {
-      const adjusted = new Date(kickoffDate.getTime() - 60000)
-      return adjusted.toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
-      })
-    }
-    return str
-  })() : 'TBD'
+  const kickoff = m.kickoff_time ? new Date(m.kickoff_time).toLocaleDateString('en-US', {
+  month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
+}) : 'TBD'
 
   let pts = null
   if (state.userPicks[m.id] && m.result) {
