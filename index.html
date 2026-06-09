@@ -98,10 +98,11 @@
 <div id="app"></div>
 <script>
 
-const SUPABASE_URL = 'https://tawbzltnicvdgxlzfzsw.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhd2J6bHRuaWN2ZGd4bHpmenN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2NzQ2OTMsImV4cCI6MjA5NjI1MDY5M30.BsjXdF4eUo2Fi58h1c6V3hvlSvucMGor0TGsFriL9J0'
+const SUPABASE_URL = 'YOUR_SUPABASE_URL'
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+// ─── SCORING ───────────────────────────────────────────────────────────────
 const STAGE_POINTS = {
   group:  { winner: 4, bonus: 1 },
   r32:    { winner: 6, bonus: 1 },
@@ -111,7 +112,7 @@ const STAGE_POINTS = {
   final:  { winner: 12, bonus: 2 },
 }
 
-const GROUP_OUTCOMES = ['home_3plus','home_2','home_1','draw','away_1','away_2','away_3plus']
+const GROUP_OUTCOMES  = ['home_3plus','home_2','home_1','draw','away_1','away_2','away_3plus']
 const KNOCKOUT_OUTCOMES = ['home_3plus','home_2','home_1','home_pks','away_pks','away_1','away_2','away_3plus']
 
 function getOutcomeList(stage) {
@@ -140,6 +141,150 @@ function calcPoints(stage, picked, actual) {
   else return Math.max(-4, -(dist - 1))
 }
 
+// ─── ESPN SYNC ─────────────────────────────────────────────────────────────
+const ESPN_TEAM_MAP = {
+  'Mexico': 'Mexico', 'South Africa': 'South Africa',
+  'Korea Republic': 'South Korea', 'South Korea': 'South Korea',
+  'Czech Republic': 'Czechia', 'Czechia': 'Czechia',
+  'Canada': 'Canada',
+  'Bosnia and Herzegovina': 'Bosnia & Herzegovina', 'Bosnia & Herzegovina': 'Bosnia & Herzegovina',
+  'Qatar': 'Qatar', 'Switzerland': 'Switzerland',
+  'Brazil': 'Brazil', 'Morocco': 'Morocco', 'Haiti': 'Haiti', 'Scotland': 'Scotland',
+  'United States': 'USA', 'USA': 'USA',
+  'Paraguay': 'Paraguay', 'Australia': 'Australia',
+  'Turkey': 'Türkiye', 'Turkiye': 'Türkiye', 'Türkiye': 'Türkiye',
+  'Germany': 'Germany',
+  'Curacao': 'Curaçao', 'Curaçao': 'Curaçao',
+  "Cote d'Ivoire": 'Ivory Coast', 'Ivory Coast': 'Ivory Coast',
+  'Ecuador': 'Ecuador', 'Netherlands': 'Netherlands', 'Holland': 'Netherlands',
+  'Japan': 'Japan', 'Sweden': 'Sweden', 'Tunisia': 'Tunisia',
+  'Belgium': 'Belgium', 'Egypt': 'Egypt',
+  'IR Iran': 'Iran', 'Iran': 'Iran',
+  'New Zealand': 'New Zealand', 'Spain': 'Spain',
+  'Cape Verde': 'Cape Verde', 'Cabo Verde': 'Cape Verde',
+  'Saudi Arabia': 'Saudi Arabia', 'Uruguay': 'Uruguay',
+  'France': 'France', 'Senegal': 'Senegal', 'Iraq': 'Iraq', 'Norway': 'Norway',
+  'Argentina': 'Argentina', 'Algeria': 'Algeria', 'Austria': 'Austria', 'Jordan': 'Jordan',
+  'Portugal': 'Portugal',
+  'DR Congo': 'DR Congo', 'Congo DR': 'DR Congo', 'Democratic Republic of Congo': 'DR Congo',
+  'Uzbekistan': 'Uzbekistan', 'Colombia': 'Colombia',
+  'England': 'England', 'Croatia': 'Croatia', 'Ghana': 'Ghana', 'Panama': 'Panama',
+}
+
+function normalizeTeamName(name) {
+  return ESPN_TEAM_MAP[name] || name
+}
+
+function scoreToOutcome(homeScore, awayScore) {
+  const diff = homeScore - awayScore
+  if (diff === 0) return 'draw'
+  if (diff === 1) return 'home_1'
+  if (diff === 2) return 'home_2'
+  if (diff >= 3) return 'home_3plus'
+  if (diff === -1) return 'away_1'
+  if (diff === -2) return 'away_2'
+  return 'away_3plus'
+}
+
+async function fetchESPNForDate(dateStr) {
+  const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateStr}`
+  try {
+    const res = await fetch(url)
+    const data = await res.json()
+    return data.events || []
+  } catch (e) {
+    console.error('ESPN fetch error:', e)
+    return []
+  }
+}
+
+async function syncESPNResults(manualDateStr) {
+  // Get all group stage matches needing results
+  const pending = state.matches.filter(m =>
+    m.stage === 'group' && m.locked && !m.result && m.kickoff_time
+  )
+  if (pending.length === 0) return 0
+
+  const now = new Date()
+
+  // Filter by 2.5hr window unless manual
+  const toSync = manualDateStr
+    ? pending
+    : pending.filter(m => {
+        const syncTime = new Date(new Date(m.kickoff_time).getTime() + 2.5 * 60 * 60 * 1000)
+        return now >= syncTime
+      })
+
+  if (toSync.length === 0) return 0
+
+  // Group matches by ET date → YYYYMMDD key
+  const byDate = {}
+  toSync.forEach(m => {
+    let dateKey
+    if (manualDateStr) {
+      dateKey = manualDateStr
+    } else {
+      const d = new Date(m.kickoff_time)
+      const et = new Date(d.toLocaleString('en-US', { timeZone: 'America/New_York' }))
+      const y = et.getFullYear()
+      const mo = String(et.getMonth() + 1).padStart(2, '0')
+      const dy = String(et.getDate()).padStart(2, '0')
+      dateKey = `${y}${mo}${dy}`
+    }
+    if (!byDate[dateKey]) byDate[dateKey] = []
+    byDate[dateKey].push(m)
+  })
+
+  let updated = 0
+
+  for (const [dateKey, matches] of Object.entries(byDate)) {
+    const events = await fetchESPNForDate(dateKey)
+    if (!events.length) continue
+
+    for (const m of matches) {
+      const homeNorm = normalizeTeamName(m.home_team)
+      const awayNorm = normalizeTeamName(m.away_team)
+
+      const event = events.find(e => {
+        const comps = e.competitions?.[0]?.competitors || []
+        const espnHome = normalizeTeamName(comps.find(c => c.homeAway === 'home')?.team?.displayName || '')
+        const espnAway = normalizeTeamName(comps.find(c => c.homeAway === 'away')?.team?.displayName || '')
+        return espnHome === homeNorm && espnAway === awayNorm
+      })
+
+      if (!event) continue
+      const competition = event.competitions?.[0]
+      if (!competition) continue
+
+      // Only process finals
+      if (competition.status?.type?.name !== 'STATUS_FINAL') continue
+
+      const homeComp = competition.competitors.find(c => c.homeAway === 'home')
+      const awayComp = competition.competitors.find(c => c.homeAway === 'away')
+      if (!homeComp || !awayComp) continue
+
+      const homeScore = parseInt(homeComp.score)
+      const awayScore = parseInt(awayComp.score)
+      if (isNaN(homeScore) || isNaN(awayScore)) continue
+
+      const outcome = scoreToOutcome(homeScore, awayScore)
+
+      const { error } = await sb.from('matches').update({ result: outcome, locked: true }).eq('id', m.id)
+      if (!error) {
+        updated++
+        console.log(`✓ ESPN sync: ${m.home_team} vs ${m.away_team} → ${outcome} (${homeScore}-${awayScore})`)
+      }
+    }
+  }
+
+  if (updated > 0) {
+    await loadData()
+    showToast(`Synced ${updated} result${updated > 1 ? 's' : ''} from ESPN ✓`)
+  }
+  return updated
+}
+
+// ─── TEAM COLORS ───────────────────────────────────────────────────────────
 const TEAM_COLORS = {
   'Mexico':           { bg: '#006847', border: '#CE1126', text: '#fff' },
   'South Africa':     { bg: '#007A4D', border: '#FFB81C', text: '#fff' },
@@ -206,6 +351,7 @@ const TEAM_ABBR = {
   'England': 'ENG', 'Croatia': 'CRO', 'Ghana': 'GHA', 'Panama': 'PAN',
 }
 
+// ─── STATE ─────────────────────────────────────────────────────────────────
 let state = {
   user: null, page: 'picks', matches: [], userPicks: {}, pendingPicks: {},
   participants: [], allPicks: [], toast: null, toastTimer: null, loading: false,
@@ -213,12 +359,11 @@ let state = {
   resultInputs: {}, isRegister: false, loginName: '', loginPhone: '',
   loginPin: ['','','',''], loginError: '',
   openDistMatches: {},
+  syncDate: '',
+  syncStatus: '',
 }
 
-function setState(patch) {
-  Object.assign(state, patch)
-  render()
-}
+function setState(patch) { Object.assign(state, patch); render() }
 
 function showToast(msg, type = 'success') {
   if (state.toastTimer) clearTimeout(state.toastTimer)
@@ -226,6 +371,7 @@ function showToast(msg, type = 'success') {
   setState({ toast: { msg, type }, toastTimer: timer })
 }
 
+// ─── SUPABASE ──────────────────────────────────────────────────────────────
 async function loadData() {
   const [{ data: matches }, { data: picks }, { data: users }] = await Promise.all([
     sb.from('matches').select('*').order('kickoff_time'),
@@ -257,16 +403,14 @@ async function handleLogin(name, pin) {
   const { data, error } = await sb.from('users').select('*').eq('full_name', name).single()
   if (error || !data) { setState({ loading: false, loginError: 'User not found' }); return }
   if (data.pin_hash !== pin) { setState({ loading: false, loginError: 'Incorrect PIN' }); return }
-  setState({ user: data, loading: false })
-  loadData()
+  setState({ user: data, loading: false }); loadData()
 }
 
 async function handleRegister(name, phone, pin) {
   setState({ loading: true, loginError: '' })
   const { data, error } = await sb.from('users').insert({ full_name: name, phone, pin_hash: pin }).select().single()
   if (error) { setState({ loading: false, loginError: 'Registration failed. Name or phone may already exist.' }); return }
-  setState({ user: data, loading: false })
-  loadData()
+  setState({ user: data, loading: false }); loadData()
 }
 
 async function submitPick(matchId) {
@@ -304,6 +448,7 @@ async function togglePayment(userId, current) {
   loadData()
 }
 
+// ─── AUTO LOCK ─────────────────────────────────────────────────────────────
 setInterval(async () => {
   const now = new Date()
   const { data } = await sb.from('matches').select('*').eq('locked', false)
@@ -317,6 +462,12 @@ setInterval(async () => {
   }
 }, 60000)
 
+// ─── AUTO ESPN SYNC ────────────────────────────────────────────────────────
+setInterval(async () => {
+  if (state.matches.length > 0) await syncESPNResults(null)
+}, 60000)
+
+// ─── OUTCOME LABEL ─────────────────────────────────────────────────────────
 function outcomeLabel(outcome, homeTeam, awayTeam) {
   const ha = TEAM_ABBR[homeTeam] || homeTeam
   const aa = TEAM_ABBR[awayTeam] || awayTeam
@@ -328,6 +479,7 @@ function outcomeLabel(outcome, homeTeam, awayTeam) {
   return map[outcome] || outcome
 }
 
+// ─── RENDER ────────────────────────────────────────────────────────────────
 function render() {
   const app = document.getElementById('app')
   if (!app) return
@@ -405,13 +557,13 @@ function renderLogin() {
   html += '</button></div></div>'
   return html
 }
+// ─── PICKS PAGE ────────────────────────────────────────────────────────────
 function renderPicksPage() {
   const stages = ['group', 'r32', 'r16', 'qf', 'sf', 'final']
   const stageLabels = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', final: 'Final' }
   const availableStages = [...new Set(state.matches.map(m => m.stage))].sort((a,b) => stages.indexOf(a) - stages.indexOf(b))
   const activeStage = state.activeStage || 'group'
   const stageMatches = state.matches.filter(m => m.stage === activeStage)
-  const now = new Date()
 
   const upcoming = stageMatches.filter(m => !m.locked).sort((a,b) => new Date(a.kickoff_time) - new Date(b.kickoff_time))
   const past = stageMatches.filter(m => m.locked).sort((a,b) => new Date(b.kickoff_time) - new Date(a.kickoff_time))
@@ -461,13 +613,10 @@ function renderMatchCard(m, showGroup) {
   const isGroup = m.stage === 'group'
   const hc = TEAM_COLORS[m.home_team] || { bg: '#333', border: '#555', text: '#fff' }
   const ac = TEAM_COLORS[m.away_team] || { bg: '#333', border: '#555', text: '#fff' }
-  const ha = TEAM_ABBR[m.home_team] || m.home_team
-  const aa = TEAM_ABBR[m.away_team] || m.away_team
 
-  const kickoffDate = m.kickoff_time ? new Date(m.kickoff_time) : null
   const kickoff = m.kickoff_time ? new Date(m.kickoff_time).toLocaleDateString('en-US', {
-  month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
-}) : 'TBD'
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
+  }) : 'TBD'
 
   let pts = null
   if (state.userPicks[m.id] && m.result) {
@@ -530,6 +679,7 @@ function renderMatchCard(m, showGroup) {
   return html
 }
 
+// ─── STANDINGS PAGE ────────────────────────────────────────────────────────
 function renderStandingsPage() {
   const sorted = [...state.participants].sort((a,b) => b.total - a.total)
 
@@ -570,6 +720,7 @@ function renderStandingsPage() {
   return html
 }
 
+// ─── DISTRIBUTIONS PAGE ────────────────────────────────────────────────────
 function renderDistributionsPage() {
   const stages = ['group', 'r32', 'r16', 'qf', 'sf', 'final']
   const stageLabels = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', final: 'Final' }
@@ -663,6 +814,7 @@ function renderDistCard(m) {
   return html
 }
 
+// ─── SCORING PAGE ──────────────────────────────────────────────────────────
 function renderScoringPage() {
   const pot = (state.participants.length - 1) * 30
   const first = Math.round(pot * 0.50)
@@ -682,7 +834,6 @@ function renderScoringPage() {
   html += '<div class="page-title">Scoring</div>'
   html += '<div class="page-sub">How points are calculated.</div>'
 
-  // Row 1: Max Score + Total Pot
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
   html += '<div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:16px;text-align:center;">'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">Max Score</div>'
@@ -693,17 +844,14 @@ function renderScoringPage() {
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">Total Pot</div>'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:40px;font-weight:800;color:#4ade80;line-height:1;">$' + pot + '</div>'
   html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">$30 per participant</div>'
-  html += '</div>'
-  html += '</div>'
+  html += '</div></div>'
 
-  // Row 2: First Place full width
   html += '<div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:14px;text-align:center;margin-bottom:8px;">'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">🥇 First Place</div>'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:36px;font-weight:800;color:#c9a84c;line-height:1;">$' + first + '</div>'
   html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">50% of pot</div>'
   html += '</div>'
 
-  // Row 3: Second + Third
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
   html += '<div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:14px;text-align:center;">'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">🥈 Second</div>'
@@ -714,10 +862,8 @@ function renderScoringPage() {
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">🥉 Third</div>'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:30px;font-weight:800;color:#b87333;line-height:1;">$' + third + '</div>'
   html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">20% of pot</div>'
-  html += '</div>'
-  html += '</div>'
+  html += '</div></div>'
 
-  // Stage points grid
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
   for (const s of stages) {
     html += '<div style="background:#141a0f;border:1px solid rgba(255,255,255,0.07);border-radius:9px;padding:14px;">'
@@ -728,14 +874,12 @@ function renderScoringPage() {
   }
   html += '</div>'
 
-  // No pick
   html += '<div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:10px;padding:16px;margin-bottom:12px;text-align:center;">'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">No Pick</div>'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:48px;font-weight:800;color:#f87171;line-height:1;">−4 <span style="font-size:18px;color:rgba(255,255,255,0.4);font-weight:400;">pts</span></div>'
   html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">applied to all unsubmitted picks after kickoff</div>'
   html += '</div>'
 
-  // Distance penalty table
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3);margin-bottom:10px;">Distance Penalty</div>'
   html += '<div style="background:#141a0f;border:1px solid rgba(255,255,255,0.07);border-radius:9px;overflow:hidden;margin-bottom:12px;">'
   const penalties = [
@@ -756,11 +900,11 @@ function renderScoringPage() {
     html += '<span style="font-family:Barlow Condensed,sans-serif;font-weight:700;color:#c9a84c;">' + example + '</span>'
     html += '</div>'
   })
-  html += '</div>'
-  html += '</div>'
+  html += '</div></div>'
   return html
 }
 
+// ─── ADMIN PAGE ────────────────────────────────────────────────────────────
 function renderPicksStatus() {
   const sortedParticipants = [...state.participants].sort((a,b) => a.full_name.localeCompare(b.full_name))
   const matchesByDate = {}
@@ -868,15 +1012,58 @@ function renderAdminPage() {
   }
 
   if (activeTab === 'results') {
-    const lockedNoResult = state.matches.filter(m => m.locked && !m.result)
-    if (lockedNoResult.length === 0) {
-      tabContent = '<div style="color:rgba(255,255,255,0.3);font-size:13px;padding:16px 0;">No locked matches without results.</div>'
-    } else {
+    // ESPN Auto-sync section
+    tabContent += '<div class="admin-section">'
+    tabContent += '<div class="admin-section-title">ESPN Score Sync</div>'
+    tabContent += '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:12px;line-height:1.6;">Auto-sync runs every 60 seconds for group stage matches 2.5hrs after kickoff. Use manual sync to backfill a specific date.</div>'
+    tabContent += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">'
+    tabContent += '<input type="date" id="sync-date-input" value="' + state.syncDate + '" style="flex:1;padding:8px 10px;border-radius:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-family:Barlow,sans-serif;font-size:13px;min-width:140px;" />'
+    tabContent += '<button id="manual-sync-btn" style="padding:8px 16px;border-radius:6px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:#c9a84c;font-family:Barlow Condensed,sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Sync Scores</button>'
+    tabContent += '</div>'
+    if (state.syncStatus) {
+      tabContent += '<div style="font-size:12px;color:#4ade80;margin-top:4px;">' + state.syncStatus + '</div>'
+    }
+    tabContent += '</div>'
+
+    // Manual result entry for non-group stages
+    const lockedNoResult = state.matches.filter(m => m.locked && !m.result && m.stage !== 'group')
+    if (lockedNoResult.length > 0) {
+      tabContent += '<div class="admin-section">'
+      tabContent += '<div class="admin-section-title">Manual Results (Knockout)</div>'
       for (const m of lockedNoResult) {
         const outcomes = getOutcomeList(m.stage)
         const ri = state.resultInputs[m.id] || ''
-        tabContent += '<div class="admin-section">'
-        tabContent += '<div style="font-size:13px;font-weight:600;color:#e8f0e0;margin-bottom:10px;">' + m.home_team + ' vs ' + m.away_team + '</div>'
+        tabContent += '<div style="margin-bottom:12px;">'
+        tabContent += '<div style="font-size:13px;font-weight:600;color:#e8f0e0;margin-bottom:8px;">' + m.home_team + ' vs ' + m.away_team + '</div>'
+        tabContent += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
+        tabContent += '<select style="flex:1;padding:6px 8px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:12px;font-family:Barlow,sans-serif;" data-result-select="' + m.id + '">'
+        tabContent += '<option value="">Select result...</option>'
+        for (const o of outcomes) {
+          tabContent += '<option value="' + o + '" ' + (ri === o ? 'selected' : '') + '>' + outcomeLabel(o, m.home_team, m.away_team) + '</option>'
+        }
+        tabContent += '</select>'
+        tabContent += '<button class="save-btn" data-save-result="' + m.id + '">Save</button>'
+        tabContent += '</div></div>'
+      }
+      tabContent += '</div>'
+    }
+
+    // Also allow manual entry for any group stage match (override)
+    tabContent += '<div class="admin-section">'
+    tabContent += '<div class="admin-section-title">Manual Override (Group Stage)</div>'
+    tabContent += '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:12px;">Override auto-sync or enter a result manually for any locked group match.</div>'
+    const lockedGroupNoResult = state.matches.filter(m => m.locked && !m.result && m.stage === 'group')
+    if (lockedGroupNoResult.length === 0) {
+      tabContent += '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No pending group stage results.</div>'
+    } else {
+      for (const m of lockedGroupNoResult) {
+        const outcomes = getOutcomeList(m.stage)
+        const ri = state.resultInputs[m.id] || ''
+        tabContent += '<div style="margin-bottom:12px;">'
+        tabContent += '<div style="font-size:12px;color:#e8f0e0;margin-bottom:6px;">'
+        tabContent += '<span style="font-family:Barlow Condensed,sans-serif;font-size:9px;color:#c9a84c;margin-right:6px;">GRP ' + m.group_name + '</span>'
+        tabContent += m.home_team + ' vs ' + m.away_team
+        tabContent += '</div>'
         tabContent += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
         tabContent += '<select style="flex:1;padding:6px 8px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:12px;font-family:Barlow,sans-serif;" data-result-select="' + m.id + '">'
         tabContent += '<option value="">Select result...</option>'
@@ -888,6 +1075,7 @@ function renderAdminPage() {
         tabContent += '</div></div>'
       }
     }
+    tabContent += '</div>'
   }
 
   if (activeTab === 'payments') {
@@ -918,6 +1106,7 @@ function renderAdminPage() {
   return html
 }
 
+// ─── EVENT BINDING ─────────────────────────────────────────────────────────
 function bindLogin() {
   document.getElementById('login-tab')?.addEventListener('click', () => setState({ isRegister: false, loginError: '' }))
   document.getElementById('register-tab')?.addEventListener('click', () => setState({ isRegister: true, loginError: '' }))
@@ -995,6 +1184,21 @@ function bindEvents() {
       const id = el.dataset.toggleDistMatch
       setState({ openDistMatches: { ...state.openDistMatches, [id]: !state.openDistMatches[id] } })
     })
+  })
+
+  // Sync date input
+  document.getElementById('sync-date-input')?.addEventListener('change', e => {
+    state.syncDate = e.target.value
+  })
+
+  // Manual sync button
+  document.getElementById('manual-sync-btn')?.addEventListener('click', async () => {
+    if (!state.syncDate) { showToast('Please select a date first', 'error'); return }
+    // Convert YYYY-MM-DD to YYYYMMDD
+    const dateStr = state.syncDate.replace(/-/g, '')
+    setState({ syncStatus: 'Syncing...' })
+    const count = await syncESPNResults(dateStr)
+    setState({ syncStatus: count > 0 ? 'Synced ' + count + ' result' + (count > 1 ? 's' : '') + ' ✓' : 'No new results found for that date.' })
   })
 }
 
