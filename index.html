@@ -69,9 +69,10 @@
     .standings-header { display: grid; grid-template-columns: 32px 1fr 80px 80px 80px; gap: 0; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
     .standings-header span { font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,0.25); text-align: right; }
     .standings-header span:nth-child(2) { text-align: left; }
-    .standings-row { display: grid; grid-template-columns: 32px 1fr 80px 80px 80px; gap: 0; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); align-items: center; }
+    .standings-row { display: grid; grid-template-columns: 32px 1fr 80px 80px 80px; gap: 0; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); align-items: center; cursor: pointer; }
     .standings-row:last-child { border-bottom: none; }
     .standings-row.me { background: rgba(201,168,76,0.04); }
+    .standings-row.expanded { background: rgba(201,168,76,0.06); border-bottom: none; }
     .s-rank { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; line-height: 1; }
     .s-name { font-size: 13px; font-weight: 500; color: #e8f0e0; }
     .s-grp { font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; text-align: right; padding-right: 6px; }
@@ -79,6 +80,7 @@
     .s-total { font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 700; text-align: right; }
     .dist-card { background: #141a0f; border: 1px solid rgba(255,255,255,0.07); border-radius: 9px; overflow: hidden; margin-bottom: 8px; }
     .dist-header { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: transparent; border: none; cursor: pointer; color: #e8f0e0; text-align: left; }
+    .donut-tooltip { position: fixed; background: #0a0f07; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 8px 12px; pointer-events: none; z-index: 9999; white-space: nowrap; display: none; }
     .toast { position: fixed; bottom: 80px; right: 16px; z-index: 9999; background: rgba(74,222,128,0.95); color: #000; padding: 10px 16px; border-radius: 8px; font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; }
     .toast-error { background: rgba(248,113,113,0.95); color: #fff; }
     .admin-section { background: #141a0f; border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
@@ -96,13 +98,13 @@
 </head>
 <body>
 <div id="app"></div>
+<div class="donut-tooltip" id="donut-tooltip"></div>
 <script>
 
 const SUPABASE_URL = 'https://tawbzltnicvdgxlzfzsw.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhd2J6bHRuaWN2ZGd4bHpmenN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2NzQ2OTMsImV4cCI6MjA5NjI1MDY5M30.BsjXdF4eUo2Fi58h1c6V3hvlSvucMGor0TGsFriL9J0'
+const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY'
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-// ─── SCORING ───────────────────────────────────────────────────────────────
 const STAGE_POINTS = {
   group:  { winner: 4, bonus: 1 },
   r32:    { winner: 6, bonus: 1 },
@@ -141,6 +143,87 @@ function calcPoints(stage, picked, actual) {
   else return Math.max(-4, -(dist - 1))
 }
 
+// ─── DONUT CHART ───────────────────────────────────────────────────────────
+function buildDonutHTML(slices, matchId, size) {
+  size = size || 180
+  const r = size / 2 - 16
+  const cx = size / 2
+  const cy = size / 2
+  const circumference = 2 * Math.PI * r
+  const GAP = 4
+  const total = slices.reduce(function(s, sl) { return s + sl.count }, 0)
+
+  let offset = circumference * 0.25
+  let slicePaths = ''
+  let borderPaths = ''
+
+  slices.forEach(function(sl, i) {
+    const pct = total > 0 ? sl.count / total : 0
+    const fullDash = Math.max(0, circumference * pct - GAP)
+    const o = offset
+    offset -= circumference * pct
+
+    const labelEsc = sl.label.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    slicePaths += '<circle class="donut-slice"'
+    slicePaths += ' cx="' + cx + '" cy="' + cy + '" r="' + r + '"'
+    slicePaths += ' fill="none" stroke="' + sl.bg + '" stroke-width="20"'
+    slicePaths += ' stroke-dasharray="0 ' + circumference + '"'
+    slicePaths += ' stroke-dashoffset="' + o + '"'
+    slicePaths += ' data-full="' + fullDash + '"'
+    slicePaths += ' data-circ="' + circumference + '"'
+    slicePaths += ' data-delay="' + (i * 100) + '"'
+    slicePaths += ' data-label="' + labelEsc + '"'
+    slicePaths += ' data-count="' + sl.count + '"'
+    slicePaths += ' data-pct="' + Math.round(pct * 100) + '"'
+    slicePaths += ' style="cursor:pointer;" />'
+
+    borderPaths += '<circle'
+    borderPaths += ' cx="' + cx + '" cy="' + cy + '" r="' + r + '"'
+    borderPaths += ' fill="none" stroke="' + sl.border + '" stroke-width="2"'
+    borderPaths += ' stroke-dasharray="' + fullDash + ' ' + (circumference - fullDash) + '"'
+    borderPaths += ' stroke-dashoffset="' + o + '"'
+    borderPaths += ' style="pointer-events:none;" />'
+  })
+
+  let html = '<div style="position:relative;display:flex;justify-content:center;margin-bottom:16px;">'
+  html += '<svg id="donut-' + matchId + '" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">'
+  html += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="20" />'
+  html += slicePaths + borderPaths
+  html += '<text x="' + cx + '" y="' + (cy - 5) + '" text-anchor="middle" font-size="20" font-weight="800" fill="#fff" font-family="Barlow Condensed, sans-serif">' + total + '</text>'
+  html += '<text x="' + cx + '" y="' + (cy + 12) + '" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.4)" font-family="Barlow, sans-serif">picks</text>'
+  html += '</svg></div>'
+  return html
+}
+
+function animateDonut(matchId) {
+  setTimeout(function() {
+    const svg = document.getElementById('donut-' + matchId)
+    if (!svg) return
+    const slices = svg.querySelectorAll('.donut-slice')
+    slices.forEach(function(c) {
+      const fullDash = parseFloat(c.dataset.full)
+      const circ = parseFloat(c.dataset.circ)
+      const delay = parseInt(c.dataset.delay)
+      c.style.transition = 'none'
+      c.setAttribute('stroke-dasharray', '0 ' + circ)
+      setTimeout(function() {
+        c.style.transition = 'stroke-dasharray 0.5s ease'
+        c.setAttribute('stroke-dasharray', fullDash + ' ' + (circ - fullDash))
+      }, delay + 30)
+      c.addEventListener('click', function(e) {
+        const tooltip = document.getElementById('donut-tooltip')
+        if (!tooltip) return
+        tooltip.innerHTML = '<div style="font-family:Barlow Condensed,sans-serif;font-size:13px;font-weight:700;color:#fff;margin-bottom:2px;">' + c.dataset.label + '</div>'
+          + '<div style="font-size:11px;color:rgba(255,255,255,0.5);">' + c.dataset.count + ' picks · ' + c.dataset.pct + '%</div>'
+        tooltip.style.display = 'block'
+        tooltip.style.left = (e.clientX + 12) + 'px'
+        tooltip.style.top = (e.clientY - 10) + 'px'
+        setTimeout(function() { tooltip.style.display = 'none' }, 2500)
+      })
+    })
+  }, 50)
+}
+
 // ─── ESPN SYNC ─────────────────────────────────────────────────────────────
 const ESPN_TEAM_MAP = {
   'Mexico': 'Mexico', 'South Africa': 'South Africa',
@@ -153,27 +236,23 @@ const ESPN_TEAM_MAP = {
   'United States': 'USA', 'USA': 'USA',
   'Paraguay': 'Paraguay', 'Australia': 'Australia',
   'Turkey': 'Türkiye', 'Turkiye': 'Türkiye', 'Türkiye': 'Türkiye',
-  'Germany': 'Germany',
-  'Curacao': 'Curaçao', 'Curaçao': 'Curaçao',
+  'Germany': 'Germany', 'Curacao': 'Curaçao', 'Curaçao': 'Curaçao',
   "Cote d'Ivoire": 'Ivory Coast', 'Ivory Coast': 'Ivory Coast',
   'Ecuador': 'Ecuador', 'Netherlands': 'Netherlands', 'Holland': 'Netherlands',
   'Japan': 'Japan', 'Sweden': 'Sweden', 'Tunisia': 'Tunisia',
-  'Belgium': 'Belgium', 'Egypt': 'Egypt',
-  'IR Iran': 'Iran', 'Iran': 'Iran',
+  'Belgium': 'Belgium', 'Egypt': 'Egypt', 'IR Iran': 'Iran', 'Iran': 'Iran',
   'New Zealand': 'New Zealand', 'Spain': 'Spain',
   'Cape Verde': 'Cape Verde', 'Cabo Verde': 'Cape Verde',
   'Saudi Arabia': 'Saudi Arabia', 'Uruguay': 'Uruguay',
   'France': 'France', 'Senegal': 'Senegal', 'Iraq': 'Iraq', 'Norway': 'Norway',
   'Argentina': 'Argentina', 'Algeria': 'Algeria', 'Austria': 'Austria', 'Jordan': 'Jordan',
-  'Portugal': 'Portugal',
-  'DR Congo': 'DR Congo', 'Congo DR': 'DR Congo', 'Democratic Republic of Congo': 'DR Congo',
+  'Portugal': 'Portugal', 'DR Congo': 'DR Congo', 'Congo DR': 'DR Congo',
+  'Democratic Republic of Congo': 'DR Congo',
   'Uzbekistan': 'Uzbekistan', 'Colombia': 'Colombia',
   'England': 'England', 'Croatia': 'Croatia', 'Ghana': 'Ghana', 'Panama': 'Panama',
 }
 
-function normalizeTeamName(name) {
-  return ESPN_TEAM_MAP[name] || name
-}
+function normalizeTeamName(name) { return ESPN_TEAM_MAP[name] || name }
 
 function scoreToOutcome(homeScore, awayScore) {
   const diff = homeScore - awayScore
@@ -187,39 +266,26 @@ function scoreToOutcome(homeScore, awayScore) {
 }
 
 async function fetchESPNForDate(dateStr) {
-  const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateStr}`
+  const url = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=' + dateStr
   try {
     const res = await fetch(url)
     const data = await res.json()
     return data.events || []
-  } catch (e) {
-    console.error('ESPN fetch error:', e)
-    return []
-  }
+  } catch(e) { console.error('ESPN fetch error:', e); return [] }
 }
 
 async function syncESPNResults(manualDateStr) {
-  // Get all group stage matches needing results
-  const pending = state.matches.filter(m =>
-    m.stage === 'group' && m.locked && !m.result && m.kickoff_time
-  )
+  const pending = state.matches.filter(function(m) { return m.stage === 'group' && m.locked && !m.result && m.kickoff_time })
   if (pending.length === 0) return 0
-
   const now = new Date()
-
-  // Filter by 2.5hr window unless manual
-  const toSync = manualDateStr
-    ? pending
-    : pending.filter(m => {
-        const syncTime = new Date(new Date(m.kickoff_time).getTime() + 2.5 * 60 * 60 * 1000)
-        return now >= syncTime
-      })
-
+  const toSync = manualDateStr ? pending : pending.filter(function(m) {
+    const syncTime = new Date(new Date(m.kickoff_time).getTime() + 2.5 * 60 * 60 * 1000)
+    return now >= syncTime
+  })
   if (toSync.length === 0) return 0
 
-  // Group matches by ET date → YYYYMMDD key
   const byDate = {}
-  toSync.forEach(m => {
+  toSync.forEach(function(m) {
     let dateKey
     if (manualDateStr) {
       dateKey = manualDateStr
@@ -229,58 +295,41 @@ async function syncESPNResults(manualDateStr) {
       const y = et.getFullYear()
       const mo = String(et.getMonth() + 1).padStart(2, '0')
       const dy = String(et.getDate()).padStart(2, '0')
-      dateKey = `${y}${mo}${dy}`
+      dateKey = y + mo + dy
     }
     if (!byDate[dateKey]) byDate[dateKey] = []
     byDate[dateKey].push(m)
   })
 
   let updated = 0
-
   for (const [dateKey, matches] of Object.entries(byDate)) {
     const events = await fetchESPNForDate(dateKey)
     if (!events.length) continue
-
     for (const m of matches) {
       const homeNorm = normalizeTeamName(m.home_team)
       const awayNorm = normalizeTeamName(m.away_team)
-
-      const event = events.find(e => {
-        const comps = e.competitions?.[0]?.competitors || []
-        const espnHome = normalizeTeamName(comps.find(c => c.homeAway === 'home')?.team?.displayName || '')
-        const espnAway = normalizeTeamName(comps.find(c => c.homeAway === 'away')?.team?.displayName || '')
+      const event = events.find(function(e) {
+        const comps = e.competitions && e.competitions[0] && e.competitions[0].competitors || []
+        const espnHome = normalizeTeamName((comps.find(function(c) { return c.homeAway === 'home' }) || {team:{}}).team.displayName || '')
+        const espnAway = normalizeTeamName((comps.find(function(c) { return c.homeAway === 'away' }) || {team:{}}).team.displayName || '')
         return espnHome === homeNorm && espnAway === awayNorm
       })
-
       if (!event) continue
-      const competition = event.competitions?.[0]
+      const competition = event.competitions && event.competitions[0]
       if (!competition) continue
-
-      // Only process finals
-      if (competition.status?.type?.name !== 'STATUS_FINAL') continue
-
-      const homeComp = competition.competitors.find(c => c.homeAway === 'home')
-      const awayComp = competition.competitors.find(c => c.homeAway === 'away')
+      if (competition.status && competition.status.type && competition.status.type.name !== 'STATUS_FINAL') continue
+      const homeComp = competition.competitors.find(function(c) { return c.homeAway === 'home' })
+      const awayComp = competition.competitors.find(function(c) { return c.homeAway === 'away' })
       if (!homeComp || !awayComp) continue
-
       const homeScore = parseInt(homeComp.score)
       const awayScore = parseInt(awayComp.score)
       if (isNaN(homeScore) || isNaN(awayScore)) continue
-
       const outcome = scoreToOutcome(homeScore, awayScore)
-
       const { error } = await sb.from('matches').update({ result: outcome, locked: true }).eq('id', m.id)
-      if (!error) {
-        updated++
-        console.log(`✓ ESPN sync: ${m.home_team} vs ${m.away_team} → ${outcome} (${homeScore}-${awayScore})`)
-      }
+      if (!error) { updated++; console.log('ESPN sync: ' + m.home_team + ' vs ' + m.away_team + ' → ' + outcome) }
     }
   }
-
-  if (updated > 0) {
-    await loadData()
-    showToast(`Synced ${updated} result${updated > 1 ? 's' : ''} from ESPN ✓`)
-  }
+  if (updated > 0) { await loadData(); showToast('Synced ' + updated + ' result' + (updated > 1 ? 's' : '') + ' from ESPN ✓') }
   return updated
 }
 
@@ -358,17 +407,17 @@ let state = {
   activeStage: 'group', activeDistStage: 'group', adminTab: 'matches',
   resultInputs: {}, isRegister: false, loginName: '', loginPhone: '',
   loginPin: ['','','',''], loginError: '',
-  openDistMatches: {},
-  syncDate: '',
-  syncStatus: '',
+  openDistMatches: {}, expandedStandingId: null,
+  syncDate: '', syncStatus: '',
 }
 
 function setState(patch) { Object.assign(state, patch); render() }
 
-function showToast(msg, type = 'success') {
+function showToast(msg, type) {
+  type = type || 'success'
   if (state.toastTimer) clearTimeout(state.toastTimer)
-  const timer = setTimeout(() => setState({ toast: null, toastTimer: null }), 3000)
-  setState({ toast: { msg, type }, toastTimer: timer })
+  const timer = setTimeout(function() { setState({ toast: null, toastTimer: null }) }, 3000)
+  setState({ toast: { msg: msg, type: type }, toastTimer: timer })
 }
 
 // ─── SUPABASE ──────────────────────────────────────────────────────────────
@@ -380,22 +429,19 @@ async function loadData() {
   ])
   const userPicks = {}
   if (picks && state.user) {
-    picks.filter(p => p.user_id === state.user.id).forEach(p => {
-      userPicks[p.match_id] = p.picked_outcome
-    })
+    picks.filter(function(p) { return p.user_id === state.user.id }).forEach(function(p) { userPicks[p.match_id] = p.picked_outcome })
   }
-  const participants = (users || []).map(u => {
+  const participants = (users || []).map(function(u) {
     let groupPts = 0, koPts = 0
-    ;(matches || []).forEach(m => {
+    ;(matches || []).forEach(function(m) {
       if (!m.result) return
-      const pick = (picks || []).find(p => p.user_id === u.id && p.match_id === m.id)
+      const pick = (picks || []).find(function(p) { return p.user_id === u.id && p.match_id === m.id })
       const pts = pick ? calcPoints(m.stage, pick.picked_outcome, m.result) : -4
-      if (m.stage === 'group') groupPts += pts
-      else koPts += pts
+      if (m.stage === 'group') groupPts += pts; else koPts += pts
     })
-    return { ...u, groupPts, koPts, total: groupPts + koPts }
-  }).sort((a, b) => b.total - a.total)
-  setState({ matches: matches || [], userPicks, participants, allPicks: picks || [] })
+    return Object.assign({}, u, { groupPts: groupPts, koPts: koPts, total: groupPts + koPts })
+  }).sort(function(a, b) { return b.total - a.total })
+  setState({ matches: matches || [], userPicks: userPicks, participants: participants, allPicks: picks || [] })
 }
 
 async function handleLogin(name, pin) {
@@ -408,7 +454,7 @@ async function handleLogin(name, pin) {
 
 async function handleRegister(name, phone, pin) {
   setState({ loading: true, loginError: '' })
-  const { data, error } = await sb.from('users').insert({ full_name: name, phone, pin_hash: pin }).select().single()
+  const { data, error } = await sb.from('users').insert({ full_name: name, phone: phone, pin_hash: pin }).select().single()
   if (error) { setState({ loading: false, loginError: 'Registration failed. Name or phone may already exist.' }); return }
   setState({ user: data, loading: false }); loadData()
 }
@@ -416,58 +462,47 @@ async function handleRegister(name, phone, pin) {
 async function submitPick(matchId) {
   const picked = state.pendingPicks[matchId]
   if (!picked) return
-  const { error } = await sb.from('picks').upsert(
-    { user_id: state.user.id, match_id: matchId, picked_outcome: picked },
-    { onConflict: 'user_id,match_id' }
-  )
+  const { error } = await sb.from('picks').upsert({ user_id: state.user.id, match_id: matchId, picked_outcome: picked }, { onConflict: 'user_id,match_id' })
   if (!error) {
-    const userPicks = { ...state.userPicks, [matchId]: picked }
-    const pendingPicks = { ...state.pendingPicks }
+    const userPicks = Object.assign({}, state.userPicks)
+    userPicks[matchId] = picked
+    const pendingPicks = Object.assign({}, state.pendingPicks)
     delete pendingPicks[matchId]
-    setState({ userPicks, pendingPicks })
-    showToast('Pick submitted! ✓')
-    loadData()
+    setState({ userPicks: userPicks, pendingPicks: pendingPicks })
+    showToast('Pick submitted! ✓'); loadData()
   }
 }
 
 async function toggleLock(matchId, current) {
   await sb.from('matches').update({ locked: !current }).eq('id', matchId)
-  showToast(!current ? 'Match locked 🔒' : 'Match unlocked')
-  loadData()
+  showToast(!current ? 'Match locked 🔒' : 'Match unlocked'); loadData()
 }
 
 async function enterResult(matchId, result) {
-  await sb.from('matches').update({ result, locked: true }).eq('id', matchId)
-  showToast('Result saved ✓')
-  loadData()
+  await sb.from('matches').update({ result: result, locked: true }).eq('id', matchId)
+  showToast('Result saved ✓'); loadData()
 }
 
 async function togglePayment(userId, current) {
   await sb.from('users').update({ paid: !current }).eq('id', userId)
-  showToast(!current ? 'Marked as paid ✓' : 'Marked as unpaid')
-  loadData()
+  showToast(!current ? 'Marked as paid ✓' : 'Marked as unpaid'); loadData()
 }
 
-// ─── AUTO LOCK ─────────────────────────────────────────────────────────────
-setInterval(async () => {
+setInterval(async function() {
   const now = new Date()
   const { data } = await sb.from('matches').select('*').eq('locked', false)
   if (data) {
     for (const m of data) {
-      if (m.kickoff_time && new Date(m.kickoff_time) <= now) {
-        await sb.from('matches').update({ locked: true }).eq('id', m.id)
-      }
+      if (m.kickoff_time && new Date(m.kickoff_time) <= now) await sb.from('matches').update({ locked: true }).eq('id', m.id)
     }
     loadData()
   }
 }, 60000)
 
-// ─── AUTO ESPN SYNC ────────────────────────────────────────────────────────
-setInterval(async () => {
+setInterval(async function() {
   if (state.matches.length > 0) await syncESPNResults(null)
 }, 60000)
 
-// ─── OUTCOME LABEL ─────────────────────────────────────────────────────────
 function outcomeLabel(outcome, homeTeam, awayTeam) {
   const ha = TEAM_ABBR[homeTeam] || homeTeam
   const aa = TEAM_ABBR[awayTeam] || awayTeam
@@ -494,11 +529,9 @@ function render() {
 }
 
 function renderTopbar() {
-  return '<header class="topbar">'
-    + '<div class="topbar-logo"><span class="topbar-year">2026</span><span class="topbar-title">World Cup Pool</span></div>'
+  return '<header class="topbar"><div class="topbar-logo"><span class="topbar-year">2026</span><span class="topbar-title">World Cup Pool</span></div>'
     + '<div class="topbar-right"><span class="topbar-user"><strong>' + state.user.full_name + '</strong></span>'
-    + '<button class="signout-btn" id="signout-btn">Sign Out</button></div>'
-    + '</header>'
+    + '<button class="signout-btn" id="signout-btn">Sign Out</button></div></header>'
 }
 
 function renderBottomNav() {
@@ -507,17 +540,14 @@ function renderBottomNav() {
     { key: 'standings', label: 'Standings', icon: '🏆' },
     { key: 'distributions', label: 'Distrib.', icon: '📊' },
     { key: 'scoring', label: 'Scoring', icon: '📋' },
-    ...(state.user && state.user.is_admin ? [{ key: 'admin', label: 'Admin', icon: '⚙️' }] : []),
   ]
+  if (state.user && state.user.is_admin) items.push({ key: 'admin', label: 'Admin', icon: '⚙️' })
   let html = '<nav class="bottom-nav">'
   for (const item of items) {
     html += '<button class="bnav-item ' + (state.page === item.key ? 'bnav-active' : '') + '" data-page="' + item.key + '">'
-    html += '<span class="bnav-icon">' + item.icon + '</span>'
-    html += '<span class="bnav-label">' + item.label + '</span>'
-    html += '</button>'
+    html += '<span class="bnav-icon">' + item.icon + '</span><span class="bnav-label">' + item.label + '</span></button>'
   }
-  html += '</nav>'
-  return html
+  return html + '</nav>'
 }
 
 function renderPage() {
@@ -532,53 +562,41 @@ function renderPage() {
 function renderLogin() {
   const isReg = state.isRegister
   let html = '<div class="login-wrap"><div class="login-card">'
-  html += '<div class="login-year-badge">2026</div>'
-  html += '<div class="login-title">World Cup Pool</div>'
+  html += '<div class="login-year-badge">2026</div><div class="login-title">World Cup Pool</div>'
   html += '<div class="login-sub">FIFA World Cup 2026</div>'
   html += '<div class="login-toggle">'
   html += '<button class="toggle-btn ' + (!isReg ? 'active' : '') + '" id="login-tab">Sign In</button>'
-  html += '<button class="toggle-btn ' + (isReg ? 'active' : '') + '" id="register-tab">Register</button>'
-  html += '</div>'
+  html += '<button class="toggle-btn ' + (isReg ? 'active' : '') + '" id="register-tab">Register</button></div>'
   if (state.loginError) html += '<div class="error-msg">' + state.loginError + '</div>'
-  html += '<div class="field-label">Full Name</div>'
-  html += '<input class="field-input" id="login-name" placeholder="e.g. Alex Thompson" value="' + state.loginName + '" />'
-  if (isReg) {
-    html += '<div class="field-label">Phone Number</div>'
-    html += '<input class="field-input" id="login-phone" placeholder="(555) 000-0000" value="' + state.loginPhone + '" />'
-  }
-  html += '<div class="field-label">4-Digit PIN</div>'
-  html += '<div class="pin-row">'
-  for (let i = 0; i < 4; i++) {
-    html += '<input class="pin-input" id="pin-' + i + '" type="password" inputmode="numeric" maxlength="1" value="' + state.loginPin[i] + '" />'
-  }
-  html += '</div>'
-  html += '<button class="btn-primary" id="login-submit" ' + (state.loading ? 'disabled' : '') + '>'
-  html += (state.loading ? 'Please wait...' : isReg ? 'Create Account' : 'Sign In')
-  html += '</button></div></div>'
+  html += '<div class="field-label">Full Name</div><input class="field-input" id="login-name" placeholder="e.g. Alex Thompson" value="' + state.loginName + '" />'
+  if (isReg) html += '<div class="field-label">Phone Number</div><input class="field-input" id="login-phone" placeholder="(555) 000-0000" value="' + state.loginPhone + '" />'
+  html += '<div class="field-label">4-Digit PIN</div><div class="pin-row">'
+  for (let i = 0; i < 4; i++) html += '<input class="pin-input" id="pin-' + i + '" type="password" inputmode="numeric" maxlength="1" value="' + state.loginPin[i] + '" />'
+  html += '</div><button class="btn-primary" id="login-submit" ' + (state.loading ? 'disabled' : '') + '>'
+  html += (state.loading ? 'Please wait...' : isReg ? 'Create Account' : 'Sign In') + '</button></div></div>'
   return html
 }
+
 // ─── PICKS PAGE ────────────────────────────────────────────────────────────
 function renderPicksPage() {
-  const stages = ['group', 'r32', 'r16', 'qf', 'sf', 'final']
-  const stageLabels = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', final: 'Final' }
-  const availableStages = [...new Set(state.matches.map(m => m.stage))].sort((a,b) => stages.indexOf(a) - stages.indexOf(b))
+  const stages = ['group','r32','r16','qf','sf','final']
+  const stageLabels = { group:'Group Stage', r32:'Round of 32', r16:'Round of 16', qf:'Quarterfinals', sf:'Semifinals', final:'Final' }
+  const availableStages = [...new Set(state.matches.map(function(m) { return m.stage }))].sort(function(a,b) { return stages.indexOf(a) - stages.indexOf(b) })
   const activeStage = state.activeStage || 'group'
-  const stageMatches = state.matches.filter(m => m.stage === activeStage)
-
-  const upcoming = stageMatches.filter(m => !m.locked).sort((a,b) => new Date(a.kickoff_time) - new Date(b.kickoff_time))
-  const past = stageMatches.filter(m => m.locked).sort((a,b) => new Date(b.kickoff_time) - new Date(a.kickoff_time))
+  const stageMatches = state.matches.filter(function(m) { return m.stage === activeStage })
+  const upcoming = stageMatches.filter(function(m) { return !m.locked }).sort(function(a,b) { return new Date(a.kickoff_time) - new Date(b.kickoff_time) })
+  const past = stageMatches.filter(function(m) { return m.locked }).sort(function(a,b) { return new Date(b.kickoff_time) - new Date(a.kickoff_time) })
 
   let upcomingHtml = ''
   if (activeStage === 'group') {
     const byDate = {}
-    upcoming.forEach(m => {
-      const dk = new Date(m.kickoff_time).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' })
+    upcoming.forEach(function(m) {
+      const dk = new Date(m.kickoff_time).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', timeZone:'America/New_York' })
       if (!byDate[dk]) byDate[dk] = []
       byDate[dk].push(m)
     })
     for (const [date, matches] of Object.entries(byDate)) {
-      upcomingHtml += '<div style="margin-bottom:16px;">'
-      upcomingHtml += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9a84c;margin-bottom:8px;padding:0 2px;">' + date + '</div>'
+      upcomingHtml += '<div style="margin-bottom:16px;"><div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9a84c;margin-bottom:8px;padding:0 2px;">' + date + '</div>'
       for (const m of matches) upcomingHtml += renderMatchCard(m, true)
       upcomingHtml += '</div>'
     }
@@ -591,20 +609,16 @@ function renderPicksPage() {
     pastHtml += '<div style="margin:24px 0 12px;display:flex;align-items:center;gap:10px;">'
     pastHtml += '<div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>'
     pastHtml += '<div style="font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.25);">Past Matches</div>'
-    pastHtml += '<div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>'
-    pastHtml += '</div>'
+    pastHtml += '<div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div></div>'
     for (const m of past) pastHtml += renderMatchCard(m, true)
   }
 
   let tabsHtml = '<div class="stage-tabs">'
-  for (const s of availableStages) {
-    tabsHtml += '<button class="stage-tab ' + (activeStage === s ? 'active' : '') + '" data-stage="' + s + '">' + stageLabels[s] + '</button>'
-  }
+  for (const s of availableStages) tabsHtml += '<button class="stage-tab ' + (activeStage === s ? 'active' : '') + '" data-stage="' + s + '">' + stageLabels[s] + '</button>'
   tabsHtml += '</div>'
 
-  const content = (upcomingHtml || '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No upcoming matches.</div>') + pastHtml
-
-  return '<div class="page"><div class="page-title">My Picks</div><div class="page-sub">Picks lock automatically at kickoff.</div>' + tabsHtml + content + '</div>'
+  return '<div class="page"><div class="page-title">My Picks</div><div class="page-sub">Picks lock automatically at kickoff.</div>'
+    + tabsHtml + (upcomingHtml || '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No upcoming matches.</div>') + pastHtml + '</div>'
 }
 
 function renderMatchCard(m, showGroup) {
@@ -613,15 +627,9 @@ function renderMatchCard(m, showGroup) {
   const isGroup = m.stage === 'group'
   const hc = TEAM_COLORS[m.home_team] || { bg: '#333', border: '#555', text: '#fff' }
   const ac = TEAM_COLORS[m.away_team] || { bg: '#333', border: '#555', text: '#fff' }
-
-  const kickoff = m.kickoff_time ? new Date(m.kickoff_time).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
-  }) : 'TBD'
-
+  const kickoff = m.kickoff_time ? new Date(m.kickoff_time).toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZone:'America/New_York' }) : 'TBD'
   let pts = null
-  if (state.userPicks[m.id] && m.result) {
-    pts = calcPoints(m.stage, state.userPicks[m.id], m.result)
-  }
+  if (state.userPicks[m.id] && m.result) pts = calcPoints(m.stage, state.userPicks[m.id], m.result)
 
   function getBtnStyle(outcome) {
     const isSelected = pick === outcome
@@ -646,15 +654,15 @@ function renderMatchCard(m, showGroup) {
   let outcomesHtml = ''
   if (isGroup) {
     outcomesHtml = '<div class="outcomes-group">'
-    outcomesHtml += '<div class="outcomes-row">' + makeBtn('home_3plus') + makeBtn('home_2') + makeBtn('home_1') + '</div>'
-    outcomesHtml += '<div class="outcomes-draw">' + makeBtn('draw') + '</div>'
-    outcomesHtml += '<div class="outcomes-row">' + makeBtn('away_1') + makeBtn('away_2') + makeBtn('away_3plus') + '</div>'
-    outcomesHtml += '</div>'
+      + '<div class="outcomes-row">' + makeBtn('home_3plus') + makeBtn('home_2') + makeBtn('home_1') + '</div>'
+      + '<div class="outcomes-draw">' + makeBtn('draw') + '</div>'
+      + '<div class="outcomes-row">' + makeBtn('away_1') + makeBtn('away_2') + makeBtn('away_3plus') + '</div>'
+      + '</div>'
   } else {
     outcomesHtml = '<div class="outcomes-knockout">'
-    outcomesHtml += '<div class="outcomes-row-4">' + makeBtn('home_3plus') + makeBtn('home_2') + makeBtn('home_1') + makeBtn('home_pks') + '</div>'
-    outcomesHtml += '<div class="outcomes-row-4">' + makeBtn('away_pks') + makeBtn('away_1') + makeBtn('away_2') + makeBtn('away_3plus') + '</div>'
-    outcomesHtml += '</div>'
+      + '<div class="outcomes-row-4">' + makeBtn('home_3plus') + makeBtn('home_2') + makeBtn('home_1') + makeBtn('home_pks') + '</div>'
+      + '<div class="outcomes-row-4">' + makeBtn('away_pks') + makeBtn('away_1') + makeBtn('away_2') + makeBtn('away_3plus') + '</div>'
+      + '</div>'
   }
 
   let html = '<div class="match-card" style="' + (m.locked ? 'opacity:0.85;' : '') + '">'
@@ -662,9 +670,7 @@ function renderMatchCard(m, showGroup) {
   if (m.locked) html += '<span class="locked-badge">LOCKED</span>'
   else if (submitted) html += '<span class="submitted-badge">SUBMITTED</span>'
   html += '</span></div>'
-  if (showGroup && m.group_name) {
-    html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#c9a84c;margin-bottom:4px;">Group ' + m.group_name + '</div>'
-  }
+  if (showGroup && m.group_name) html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#c9a84c;margin-bottom:4px;">Group ' + m.group_name + '</div>'
   html += '<div class="match-title">' + m.home_team + ' vs ' + m.away_team + '</div>'
   html += outcomesHtml
   if (m.result) {
@@ -675,13 +681,13 @@ function renderMatchCard(m, showGroup) {
     html += '<button class="submit-pick-btn" data-submit="' + m.id + '" ' + (!state.pendingPicks[m.id] ? 'disabled' : '') + '>'
     html += (state.userPicks[m.id] ? 'Update Pick' : 'Submit Pick') + '</button>'
   }
-  html += '</div>'
-  return html
+  return html + '</div>'
 }
 
 // ─── STANDINGS PAGE ────────────────────────────────────────────────────────
 function renderStandingsPage() {
-  const sorted = [...state.participants].sort((a,b) => b.total - a.total)
+  const sorted = [...state.participants].sort(function(a,b) { return b.total - a.total })
+  const lockedMatches = state.matches.filter(function(m) { return m.locked })
 
   function getMedal(rank) {
     if (rank === 1) return '🥇'
@@ -690,29 +696,98 @@ function renderStandingsPage() {
     return String(rank)
   }
 
+  function renderDrillDown(u) {
+    // Group locked matches by ET date
+    const byDate = {}
+    lockedMatches.forEach(function(m) {
+      const dk = new Date(m.kickoff_time).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', timeZone:'America/New_York' })
+      if (!byDate[dk]) byDate[dk] = []
+      byDate[dk].push(m)
+    })
+
+    let html = '<div style="background:rgba(201,168,76,0.03);border-bottom:1px solid rgba(255,255,255,0.04);">'
+
+    for (const [date, matches] of Object.entries(byDate)) {
+      html += '<div style="padding:6px 12px 2px;font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#c9a84c;border-top:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);">' + date + '</div>'
+
+      for (const m of matches) {
+        const pick = state.allPicks.find(function(p) { return p.user_id === u.id && p.match_id === m.id })
+        const pts = (pick && m.result) ? calcPoints(m.stage, pick.picked_outcome, m.result) : null
+        const ptsColor = pts === null ? 'rgba(255,255,255,0.3)' : pts > 0 ? '#4ade80' : pts < 0 ? '#f87171' : 'rgba(255,255,255,0.4)'
+        const tc = pick ? (TEAM_COLORS[pick.picked_outcome.startsWith('home') ? m.home_team : pick.picked_outcome.startsWith('away') ? m.away_team : null] || null) : null
+
+        html += '<div style="display:flex;align-items:center;padding:8px 12px;border-top:1px solid rgba(255,255,255,0.03);gap:8px;">'
+        // Match name
+        html += '<div style="flex:1;min-width:0;">'
+        html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;color:#e8f0e0;">'
+        html += (TEAM_ABBR[m.home_team] || m.home_team) + ' vs ' + (TEAM_ABBR[m.away_team] || m.away_team)
+        html += '</div>'
+        if (m.result) {
+          html += '<div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:1px;">Result: ' + outcomeLabel(m.result, m.home_team, m.away_team) + '</div>'
+        } else {
+          html += '<div style="font-size:10px;color:#c9a84c;margin-top:1px;">In progress</div>'
+        }
+        html += '</div>'
+        // Pick badge
+        if (pick) {
+          const pickBg = pick.picked_outcome === 'draw' ? '#c9a84c' :
+            pick.picked_outcome.startsWith('home') ? (TEAM_COLORS[m.home_team] || { bg: '#444' }).bg :
+            (TEAM_COLORS[m.away_team] || { bg: '#444' }).bg
+          const pickText = pick.picked_outcome === 'draw' ? '#000' :
+            pick.picked_outcome.startsWith('home') ? (TEAM_COLORS[m.home_team] || { text: '#fff' }).text :
+            (TEAM_COLORS[m.away_team] || { text: '#fff' }).text
+          html += '<span style="background:' + pickBg + ';color:' + pickText + ';padding:2px 8px;border-radius:4px;font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;white-space:nowrap;">'
+          html += outcomeLabel(pick.picked_outcome, m.home_team, m.away_team) + '</span>'
+        } else {
+          html += '<span style="font-size:10px;color:#f87171;font-family:Barlow Condensed,sans-serif;font-weight:700;padding:2px 8px;background:rgba(248,113,113,0.1);border-radius:4px;">NO PICK</span>'
+        }
+        // Points
+        html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:14px;font-weight:700;color:' + ptsColor + ';min-width:28px;text-align:right;">'
+        html += pts !== null ? pts : (m.result ? '-4' : '—')
+        html += '</div>'
+        html += '</div>'
+      }
+    }
+
+    if (Object.keys(byDate).length === 0) {
+      html += '<div style="padding:12px;font-size:13px;color:rgba(255,255,255,0.3);">No matches started yet.</div>'
+    }
+
+    html += '</div>'
+    return html
+  }
+
   let rows = ''
-  sorted.forEach((p, i) => {
+  sorted.forEach(function(p, i) {
     const rank = i + 1
     const medal = getMedal(rank)
     const isMe = p.id === state.user.id
+    const isExpanded = state.expandedStandingId === p.id
     const scoreColor = p.total >= 0 ? '#4ade80' : '#f87171'
     const grpColor = p.groupPts >= 0 ? '#4ade80' : '#f87171'
     const koColor = p.koPts >= 0 ? '#4ade80' : '#f87171'
     const rankColor = rank===1?'#c9a84c':rank===2?'#94a3b8':rank===3?'#b87333':'rgba(255,255,255,0.2)'
-    rows += '<div class="standings-row ' + (isMe ? 'me' : '') + '">'
+
+    rows += '<div>'
+    rows += '<div class="standings-row ' + (isMe ? 'me ' : '') + (isExpanded ? 'expanded' : '') + '" data-expand-standing="' + p.id + '">'
     rows += '<div class="s-rank" style="color:' + rankColor + ';">' + medal + '</div>'
-    rows += '<div><div class="s-name" style="' + (isMe ? 'color:#c9a84c;' : '') + '">' + p.full_name
+    rows += '<div>'
+    rows += '<div class="s-name" style="' + (isExpanded || isMe ? 'color:#c9a84c;' : '') + '">' + p.full_name
     if (isMe) rows += ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(201,168,76,0.2);color:#c9a84c;font-family:Barlow Condensed,sans-serif;font-weight:700;">YOU</span>'
-    rows += '</div></div>'
+    rows += '</div>'
+    rows += '<div style="font-size:10px;color:' + (isExpanded ? '#c9a84c' : 'rgba(255,255,255,0.25)') + ';font-family:Barlow Condensed,sans-serif;font-weight:700;letter-spacing:0.5px;">' + (isExpanded ? 'HIDE ▲' : 'PICKS ▼') + '</div>'
+    rows += '</div>'
     rows += '<div class="s-grp" style="color:' + grpColor + ';">' + p.groupPts + '</div>'
     rows += '<div class="s-ko" style="color:' + koColor + ';">' + p.koPts + '</div>'
     rows += '<div class="s-total" style="color:' + scoreColor + ';">' + p.total + '</div>'
+    rows += '</div>'
+    if (isExpanded) rows += renderDrillDown(p)
     rows += '</div>'
   })
 
   let html = '<div class="page">'
   html += '<div class="page-title">Standings</div>'
-  html += '<div class="page-sub">Group pts + Knockout pts = Total</div>'
+  html += '<div class="page-sub">Click a name to see their picks. Group pts + Knockout pts = Total</div>'
   html += '<div class="standings-table">'
   html += '<div class="standings-header"><span style="text-align:left;">#</span><span style="text-align:left;">Name</span><span>Group</span><span>Knockout</span><span>Total</span></div>'
   html += rows || '<div style="padding:16px;color:rgba(255,255,255,0.3);font-size:13px;">No participants yet.</div>'
@@ -722,32 +797,25 @@ function renderStandingsPage() {
 
 // ─── DISTRIBUTIONS PAGE ────────────────────────────────────────────────────
 function renderDistributionsPage() {
-  const stages = ['group', 'r32', 'r16', 'qf', 'sf', 'final']
-  const stageLabels = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', final: 'Final' }
-  const availableStages = [...new Set(state.matches.filter(m => m.locked).map(m => m.stage))].sort((a,b) => stages.indexOf(a) - stages.indexOf(b))
+  const stages = ['group','r32','r16','qf','sf','final']
+  const stageLabels = { group:'Group Stage', r32:'Round of 32', r16:'Round of 16', qf:'Quarterfinals', sf:'Semifinals', final:'Final' }
+  const availableStages = [...new Set(state.matches.filter(function(m) { return m.locked }).map(function(m) { return m.stage }))].sort(function(a,b) { return stages.indexOf(a) - stages.indexOf(b) })
   const activeStage = state.activeDistStage || 'group'
-  const stageMatches = state.matches.filter(m => m.stage === activeStage && m.locked)
+  const stageMatches = state.matches.filter(function(m) { return m.stage === activeStage && m.locked })
 
   let tabsHtml = '<div class="stage-tabs">'
-  for (const s of availableStages) {
-    tabsHtml += '<button class="stage-tab ' + (activeStage === s ? 'active' : '') + '" data-dist-stage="' + s + '">' + stageLabels[s] + '</button>'
-  }
+  for (const s of availableStages) tabsHtml += '<button class="stage-tab ' + (activeStage === s ? 'active' : '') + '" data-dist-stage="' + s + '">' + stageLabels[s] + '</button>'
   tabsHtml += '</div>'
 
   let content = ''
   for (const m of stageMatches) content += renderDistCard(m)
 
-  let html = '<div class="page">'
-  html += '<div class="page-title">Distributions</div>'
-  html += '<div class="page-sub">How the pool split on each match.</div>'
-  html += tabsHtml
-  html += content || '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No locked matches yet.</div>'
-  html += '</div>'
-  return html
+  return '<div class="page"><div class="page-title">Distributions</div><div class="page-sub">How the pool split on each match.</div>'
+    + tabsHtml + (content || '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No locked matches yet.</div>') + '</div>'
 }
 
 function renderDistCard(m) {
-  const matchPicks = state.allPicks.filter(p => p.match_id === m.id)
+  const matchPicks = state.allPicks.filter(function(p) { return p.match_id === m.id })
   const total = state.participants.length
   const outcomes = getOutcomeList(m.stage)
   const isOpen = !!state.openDistMatches[m.id]
@@ -755,9 +823,22 @@ function renderDistCard(m) {
   const ac = TEAM_COLORS[m.away_team] || { bg: '#333', border: '#555' }
 
   const counts = {}
-  outcomes.forEach(o => counts[o] = 0)
-  matchPicks.forEach(p => { if (counts[p.picked_outcome] !== undefined) counts[p.picked_outcome]++ })
+  outcomes.forEach(function(o) { counts[o] = 0 })
+  matchPicks.forEach(function(p) { if (counts[p.picked_outcome] !== undefined) counts[p.picked_outcome]++ })
   const noPicks = total - matchPicks.length
+
+  // Build slices for donut
+  const slices = []
+  outcomes.forEach(function(o) {
+    const isHome = o.startsWith('home')
+    const isAway = o.startsWith('away')
+    const isDraw = o === 'draw'
+    const tc = isHome ? hc : isAway ? ac : null
+    const bg = isDraw ? '#c9a84c' : tc ? tc.bg : '#374151'
+    const border = isDraw ? '#a07830' : tc ? tc.border : '#6b7280'
+    slices.push({ label: outcomeLabel(o, m.home_team, m.away_team), count: counts[o], bg: bg, border: border })
+  })
+  if (noPicks > 0) slices.push({ label: 'No Pick', count: noPicks, bg: '#374151', border: '#6b7280' })
 
   let html = '<div class="dist-card">'
   html += '<button class="dist-header" data-toggle-dist-match="' + m.id + '">'
@@ -772,20 +853,26 @@ function renderDistCard(m) {
 
   if (isOpen) {
     html += '<div style="padding:0 14px 14px;">'
+
+    // Donut chart
+    html += buildDonutHTML(slices, m.id, 180)
+
+    // Legend table
     html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0 12px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.06);">'
     html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.3);">Outcome</div>'
     html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.3);text-align:right;">Picks</div>'
     html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.3);text-align:right;">%</div>'
     html += '</div>'
 
-    for (const o of outcomes) {
+    outcomes.forEach(function(o) {
       const cnt = counts[o]
       const pct = total > 0 ? Math.round((cnt / total) * 100) : 0
       const isHome = o.startsWith('home')
       const isAway = o.startsWith('away')
+      const isDraw = o === 'draw'
       const tc = isHome ? hc : isAway ? ac : null
-      const swatchBg = tc ? tc.bg : '#c9a84c'
-      const swatchBorder = tc ? tc.border : '#a07830'
+      const swatchBg = isDraw ? '#c9a84c' : tc ? tc.bg : '#374151'
+      const swatchBorder = isDraw ? '#a07830' : tc ? tc.border : '#6b7280'
       const isResult = m.result === o
       html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0 12px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">'
       html += '<div style="display:flex;align-items:center;gap:8px;">'
@@ -795,21 +882,23 @@ function renderDistCard(m) {
       html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:15px;font-weight:700;color:#fff;text-align:right;">' + cnt + '</div>'
       html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:14px;font-weight:700;color:' + (isResult ? '#4ade80' : pct > 0 ? '#c9a84c' : 'rgba(255,255,255,0.2)') + ';text-align:right;min-width:36px;">' + pct + '%</div>'
       html += '</div>'
-    }
+    })
 
     if (noPicks > 0) {
       const pct = Math.round((noPicks / total) * 100)
       html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0 12px;align-items:center;padding:7px 0;">'
-      html += '<div style="display:flex;align-items:center;gap:8px;">'
-      html += '<div style="width:11px;height:11px;border-radius:3px;background:#374151;border:2px solid #6b7280;flex-shrink:0;"></div>'
-      html += '<span style="font-size:13px;color:rgba(255,255,255,0.65);">No Pick</span>'
-      html += '</div>'
+      html += '<div style="display:flex;align-items:center;gap:8px;"><div style="width:11px;height:11px;border-radius:3px;background:#374151;border:2px solid #6b7280;flex-shrink:0;"></div>'
+      html += '<span style="font-size:13px;color:rgba(255,255,255,0.65);">No Pick</span></div>'
       html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:15px;font-weight:700;color:#fff;text-align:right;">' + noPicks + '</div>'
       html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:14px;font-weight:700;color:rgba(255,255,255,0.2);text-align:right;min-width:36px;">' + pct + '%</div>'
       html += '</div>'
     }
     html += '</div>'
+
+    // Trigger animation after render
+    setTimeout(function() { animateDonut(m.id) }, 10)
   }
+
   html += '</div>'
   return html
 }
@@ -820,85 +909,74 @@ function renderScoringPage() {
   const first = Math.round(pot * 0.50)
   const second = Math.round(pot * 0.30)
   const third = Math.round(pot * 0.20)
-
   const stages = [
-    { key: 'group', name: 'Group Stage', winner: 4, bonus: 1 },
-    { key: 'r32',   name: 'Round of 32', winner: 6, bonus: 1 },
-    { key: 'r16',   name: 'Round of 16', winner: 7, bonus: 1 },
-    { key: 'qf',    name: 'Quarterfinals', winner: 9, bonus: 2 },
-    { key: 'sf',    name: 'Semifinals', winner: 10, bonus: 2 },
-    { key: 'final', name: 'Final', winner: 12, bonus: 2 },
+    { key:'group', name:'Group Stage', winner:4, bonus:1 },
+    { key:'r32',   name:'Round of 32', winner:6, bonus:1 },
+    { key:'r16',   name:'Round of 16', winner:7, bonus:1 },
+    { key:'qf',    name:'Quarterfinals', winner:9, bonus:2 },
+    { key:'sf',    name:'Semifinals', winner:10, bonus:2 },
+    { key:'final', name:'Final', winner:12, bonus:2 },
   ]
 
-  let html = '<div class="page">'
-  html += '<div class="page-title">Scoring</div>'
-  html += '<div class="page-sub">How points are calculated.</div>'
+  let html = '<div class="page"><div class="page-title">Scoring</div><div class="page-sub">How points are calculated.</div>'
 
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
   html += '<div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:16px;text-align:center;">'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">Max Score</div>'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:40px;font-weight:800;color:#c9a84c;line-height:1;">618 <span style="font-size:16px;color:rgba(255,255,255,0.4);font-weight:400;">pts</span></div>'
-  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">exact margin every pick</div>'
-  html += '</div>'
+  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">exact margin every pick</div></div>'
   html += '<div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:16px;text-align:center;">'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">Total Pot</div>'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:40px;font-weight:800;color:#4ade80;line-height:1;">$' + pot + '</div>'
-  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">$25 per participant</div>'
-  html += '</div></div>'
+  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">$25 per participant</div></div></div>'
 
   html += '<div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:14px;text-align:center;margin-bottom:8px;">'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">🥇 First Place</div>'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:36px;font-weight:800;color:#c9a84c;line-height:1;">$' + first + '</div>'
-  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">50% of pot</div>'
-  html += '</div>'
+  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">50% of pot</div></div>'
 
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
   html += '<div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:14px;text-align:center;">'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">🥈 Second</div>'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:30px;font-weight:800;color:#94a3b8;line-height:1;">$' + second + '</div>'
-  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">30% of pot</div>'
-  html += '</div>'
+  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">30% of pot</div></div>'
   html += '<div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:14px;text-align:center;">'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">🥉 Third</div>'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:30px;font-weight:800;color:#b87333;line-height:1;">$' + third + '</div>'
-  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">20% of pot</div>'
-  html += '</div></div>'
+  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">20% of pot</div></div></div>'
 
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
   for (const s of stages) {
     html += '<div style="background:#141a0f;border:1px solid rgba(255,255,255,0.07);border-radius:9px;padding:14px;">'
     html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#c9a84c;margin-bottom:2px;">' + s.name + '</div>'
     html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:32px;font-weight:800;color:#fff;line-height:1;">' + s.winner + ' <span style="font-size:14px;color:rgba(255,255,255,0.3);">pts</span></div>'
-    html += '<div style="font-size:11px;color:#4ade80;margin-top:4px;font-weight:600;">+' + s.bonus + ' exact bonus</div>'
-    html += '</div>'
+    html += '<div style="font-size:11px;color:#4ade80;margin-top:4px;font-weight:600;">+' + s.bonus + ' exact bonus</div></div>'
   }
   html += '</div>'
 
   html += '<div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:10px;padding:16px;margin-bottom:12px;text-align:center;">'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:6px;">No Pick</div>'
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:48px;font-weight:800;color:#f87171;line-height:1;">−4 <span style="font-size:18px;color:rgba(255,255,255,0.4);font-weight:400;">pts</span></div>'
-  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">applied to all unsubmitted picks after kickoff</div>'
-  html += '</div>'
+  html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">applied to all unsubmitted picks after kickoff</div></div>'
 
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3);margin-bottom:10px;">Distance Penalty</div>'
   html += '<div style="background:#141a0f;border:1px solid rgba(255,255,255,0.07);border-radius:9px;overflow:hidden;margin-bottom:12px;">'
   const penalties = [
-    ['Exact (dist. 0)', 'Winner + bonus', '+5 (group)'],
-    ['Off by 1', 'Winner pts', '+4 (group)'],
-    ['Off by 2', 'Winner − 1', '+3 (group)'],
-    ['Off by 3', 'Winner − 2', '+2 (group)'],
-    ['Off by 4', 'Winner − 3', '+1 (group)'],
-    ['Off by 5+', '−4 (cap)', '−4'],
-    ['Wrong side + dist 1', '0 pts', '0'],
-    ['Wrong side + dist 2', '−1 pts', '−1'],
-    ['Wrong side + dist 5+', '−4 (cap)', '−4'],
+    ['Exact (dist. 0)','Winner + bonus','+5 (group)'],
+    ['Off by 1','Winner pts','+4 (group)'],
+    ['Off by 2','Winner − 1','+3 (group)'],
+    ['Off by 3','Winner − 2','+2 (group)'],
+    ['Off by 4','Winner − 3','+1 (group)'],
+    ['Off by 5+','−4 (cap)','−4'],
+    ['Wrong side + dist 1','0 pts','0'],
+    ['Wrong side + dist 2','−1 pts','−1'],
+    ['Wrong side + dist 5+','−4 (cap)','−4'],
   ]
-  penalties.forEach(([d, correct, example], i) => {
+  penalties.forEach(function(row, i) {
     html += '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:0 8px;padding:9px 12px;border-bottom:' + (i < penalties.length-1 ? '1px solid rgba(255,255,255,0.04)' : 'none') + ';font-size:12px;">'
-    html += '<span style="color:rgba(255,255,255,0.5);">' + d + '</span>'
-    html += '<span style="color:#e8f0e0;">' + correct + '</span>'
-    html += '<span style="font-family:Barlow Condensed,sans-serif;font-weight:700;color:#c9a84c;">' + example + '</span>'
-    html += '</div>'
+    html += '<span style="color:rgba(255,255,255,0.5);">' + row[0] + '</span>'
+    html += '<span style="color:#e8f0e0;">' + row[1] + '</span>'
+    html += '<span style="font-family:Barlow Condensed,sans-serif;font-weight:700;color:#c9a84c;">' + row[2] + '</span></div>'
   })
   html += '</div></div>'
   return html
@@ -906,20 +984,18 @@ function renderScoringPage() {
 
 // ─── ADMIN PAGE ────────────────────────────────────────────────────────────
 function renderPicksStatus() {
-  const sortedParticipants = [...state.participants].sort((a,b) => a.full_name.localeCompare(b.full_name))
+  const sortedParticipants = [...state.participants].sort(function(a,b) { return a.full_name.localeCompare(b.full_name) })
   const matchesByDate = {}
-  state.matches.filter(m => m.stage === 'group').forEach(m => {
-    const dateKey = new Date(m.kickoff_time).toLocaleDateString('en-US', {
-      weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York'
-    })
+  state.matches.filter(function(m) { return m.stage === 'group' }).forEach(function(m) {
+    const dateKey = new Date(m.kickoff_time).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', timeZone:'America/New_York' })
     if (!matchesByDate[dateKey]) matchesByDate[dateKey] = []
     matchesByDate[dateKey].push(m)
   })
 
   let html = ''
   for (const [date, matches] of Object.entries(matchesByDate)) {
-    const madePicks = matches.reduce((sum, m) => {
-      return sum + sortedParticipants.filter(u => state.allPicks.find(p => p.user_id === u.id && p.match_id === m.id)).length
+    const madePicks = matches.reduce(function(sum, m) {
+      return sum + sortedParticipants.filter(function(u) { return state.allPicks.find(function(p) { return p.user_id === u.id && p.match_id === m.id }) }).length
     }, 0)
     const totalPicks = matches.length * sortedParticipants.length
 
@@ -933,199 +1009,146 @@ function renderPicksStatus() {
     for (const m of matches) {
       const ha = TEAM_ABBR[m.home_team] || m.home_team
       const aa = TEAM_ABBR[m.away_team] || m.away_team
-      const pickedCount = sortedParticipants.filter(u => state.allPicks.find(p => p.user_id === u.id && p.match_id === m.id)).length
+      const pickedCount = sortedParticipants.filter(function(u) { return state.allPicks.find(function(p) { return p.user_id === u.id && p.match_id === m.id }) }).length
       const pct = sortedParticipants.length > 0 ? (pickedCount / sortedParticipants.length) * 100 : 0
       const barColor = pct === 100 ? '#4ade80' : pct > 0 ? '#c9a84c' : '#f87171'
-
       let nameCells = ''
       for (const u of sortedParticipants) {
-        const hasPick = state.allPicks.find(p => p.user_id === u.id && p.match_id === m.id)
-        nameCells += '<td style="text-align:center;padding:9px 6px;">'
-        nameCells += '<span style="display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700;'
-        nameCells += 'background:' + (hasPick ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.1)') + ';'
-        nameCells += 'color:' + (hasPick ? '#4ade80' : '#f87171') + ';font-family:Barlow Condensed,sans-serif;">'
-        nameCells += (hasPick ? '✓' : '—') + '</span></td>'
+        const hasPick = state.allPicks.find(function(p) { return p.user_id === u.id && p.match_id === m.id })
+        nameCells += '<td style="text-align:center;padding:9px 6px;"><span style="display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700;background:' + (hasPick ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.1)') + ';color:' + (hasPick ? '#4ade80' : '#f87171') + ';font-family:Barlow Condensed,sans-serif;">' + (hasPick ? '✓' : '—') + '</span></td>'
       }
-
       tableRows += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">'
-      tableRows += '<td style="padding:9px 12px;font-size:12px;font-weight:500;white-space:nowrap;color:#e8f0e0;">'
-      tableRows += '<span style="font-family:Barlow Condensed,sans-serif;font-size:9px;color:#c9a84c;display:block;margin-bottom:1px;">GRP ' + m.group_name + '</span>'
-      tableRows += ha + ' vs ' + aa + '</td>'
+      tableRows += '<td style="padding:9px 12px;font-size:12px;font-weight:500;white-space:nowrap;color:#e8f0e0;"><span style="font-family:Barlow Condensed,sans-serif;font-size:9px;color:#c9a84c;display:block;margin-bottom:1px;">GRP ' + m.group_name + '</span>' + ha + ' vs ' + aa + '</td>'
       tableRows += nameCells
-      tableRows += '<td style="padding:9px 12px;">'
-      tableRows += '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">'
-      tableRows += '<div style="width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;">'
-      tableRows += '<div style="height:100%;border-radius:2px;width:' + pct + '%;background:' + barColor + ';"></div></div>'
-      tableRows += '<span style="font-size:11px;font-weight:700;color:' + barColor + ';font-family:Barlow Condensed,sans-serif;">' + pickedCount + '/' + sortedParticipants.length + '</span>'
-      tableRows += '</div></td></tr>'
+      tableRows += '<td style="padding:9px 12px;"><div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;"><div style="width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;"><div style="height:100%;border-radius:2px;width:' + pct + '%;background:' + barColor + ';"></div></div><span style="font-size:11px;font-weight:700;color:' + barColor + ';font-family:Barlow Condensed,sans-serif;">' + pickedCount + '/' + sortedParticipants.length + '</span></div></td>'
+      tableRows += '</tr>'
     }
 
     html += '<div style="margin-bottom:16px;">'
-    html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9a84c;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">'
-    html += '<span>' + date + '</span>'
-    html += '<span style="color:rgba(255,255,255,0.3);font-size:10px;">' + madePicks + '/' + totalPicks + ' picks</span></div>'
-    html += '<div style="background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;">'
-    html += '<div style="overflow-x:auto;">'
-    html += '<table style="width:100%;border-collapse:collapse;min-width:400px;"><thead><tr>'
+    html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9a84c;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;"><span>' + date + '</span><span style="color:rgba(255,255,255,0.3);font-size:10px;">' + madePicks + '/' + totalPicks + ' picks</span></div>'
+    html += '<div style="background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;"><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:400px;"><thead><tr>'
     html += '<th style="text-align:left;padding:8px 12px;font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.25);border-bottom:1px solid rgba(255,255,255,0.06);white-space:nowrap;">Match</th>'
     html += headerCells
     html += '<th style="text-align:right;padding:8px 12px;font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.25);border-bottom:1px solid rgba(255,255,255,0.06);">Done</th>'
     html += '</tr></thead><tbody>' + tableRows + '</tbody></table></div></div></div>'
   }
-
   return html || '<div style="color:rgba(255,255,255,0.3);font-size:13px;padding:16px 0;">No matches yet.</div>'
 }
 
 function renderAdminPage() {
-  const tabs = ['matches', 'picks', 'results', 'payments']
-  const tabLabels = { matches: 'Matches', picks: 'Pick Status', results: 'Results', payments: 'Payments' }
+  const tabs = ['matches','picks','results','payments']
+  const tabLabels = { matches:'Matches', picks:'Pick Status', results:'Results', payments:'Payments' }
   const activeTab = state.adminTab || 'matches'
   const stages = ['group','r32','r16','qf','sf','final']
-  const stageLabels = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', final: 'Final' }
+  const stageLabels = { group:'Group Stage', r32:'Round of 32', r16:'Round of 16', qf:'Quarterfinals', sf:'Semifinals', final:'Final' }
 
   let tabContent = ''
 
   if (activeTab === 'matches') {
     for (const s of stages) {
-      const sm = state.matches.filter(m => m.stage === s)
+      const sm = state.matches.filter(function(m) { return m.stage === s })
       if (!sm.length) continue
-      tabContent += '<div class="admin-section">'
-      tabContent += '<div class="admin-section-title">' + stageLabels[s] + '</div>'
+      tabContent += '<div class="admin-section"><div class="admin-section-title">' + stageLabels[s] + '</div>'
       for (const m of sm) {
         tabContent += '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:8px;">'
-        tabContent += '<div>'
-        tabContent += '<div style="font-size:12px;color:#e8f0e0;">' + m.home_team + ' vs ' + m.away_team + '</div>'
+        tabContent += '<div><div style="font-size:12px;color:#e8f0e0;">' + m.home_team + ' vs ' + m.away_team + '</div>'
         tabContent += '<div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:2px;">'
         if (m.kickoff_time) tabContent += new Date(m.kickoff_time).toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZone:'America/New_York' })
         if (m.result) tabContent += ' <span style="color:#4ade80;margin-left:6px;">✓ ' + outcomeLabel(m.result, m.home_team, m.away_team) + '</span>'
         tabContent += '</div></div>'
-        tabContent += '<button class="lock-toggle ' + (m.locked ? 'locked-btn' : 'unlocked') + '" data-lock="' + m.id + '" data-locked="' + m.locked + '">'
-        tabContent += (m.locked ? 'Unlock' : 'Lock') + '</button>'
+        tabContent += '<button class="lock-toggle ' + (m.locked ? 'locked-btn' : 'unlocked') + '" data-lock="' + m.id + '" data-locked="' + m.locked + '">' + (m.locked ? 'Unlock' : 'Lock') + '</button>'
         tabContent += '</div>'
       }
       tabContent += '</div>'
     }
   }
 
-  if (activeTab === 'picks') {
-    tabContent = renderPicksStatus()
-  }
+  if (activeTab === 'picks') tabContent = renderPicksStatus()
 
   if (activeTab === 'results') {
-    // ESPN Auto-sync section
-    tabContent += '<div class="admin-section">'
-    tabContent += '<div class="admin-section-title">ESPN Score Sync</div>'
-    tabContent += '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:12px;line-height:1.6;">Auto-sync runs every 60 seconds for group stage matches 2.5hrs after kickoff. Use manual sync to backfill a specific date.</div>'
+    tabContent += '<div class="admin-section"><div class="admin-section-title">ESPN Score Sync</div>'
+    tabContent += '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:12px;line-height:1.6;">Auto-sync runs every 60s for group stage matches 2.5hrs after kickoff. Use manual sync to backfill a specific date.</div>'
     tabContent += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">'
     tabContent += '<input type="date" id="sync-date-input" value="' + state.syncDate + '" style="flex:1;padding:8px 10px;border-radius:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-family:Barlow,sans-serif;font-size:13px;min-width:140px;" />'
     tabContent += '<button id="manual-sync-btn" style="padding:8px 16px;border-radius:6px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:#c9a84c;font-family:Barlow Condensed,sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Sync Scores</button>'
     tabContent += '</div>'
-    if (state.syncStatus) {
-      tabContent += '<div style="font-size:12px;color:#4ade80;margin-top:4px;">' + state.syncStatus + '</div>'
-    }
+    if (state.syncStatus) tabContent += '<div style="font-size:12px;color:#4ade80;margin-top:4px;">' + state.syncStatus + '</div>'
     tabContent += '</div>'
 
-    // Manual result entry for non-group stages
-    const lockedNoResult = state.matches.filter(m => m.locked && !m.result && m.stage !== 'group')
+    const lockedNoResult = state.matches.filter(function(m) { return m.locked && !m.result && m.stage !== 'group' })
     if (lockedNoResult.length > 0) {
-      tabContent += '<div class="admin-section">'
-      tabContent += '<div class="admin-section-title">Manual Results (Knockout)</div>'
+      tabContent += '<div class="admin-section"><div class="admin-section-title">Manual Results (Knockout)</div>'
       for (const m of lockedNoResult) {
         const outcomes = getOutcomeList(m.stage)
         const ri = state.resultInputs[m.id] || ''
-        tabContent += '<div style="margin-bottom:12px;">'
-        tabContent += '<div style="font-size:13px;font-weight:600;color:#e8f0e0;margin-bottom:8px;">' + m.home_team + ' vs ' + m.away_team + '</div>'
+        tabContent += '<div style="margin-bottom:12px;"><div style="font-size:13px;font-weight:600;color:#e8f0e0;margin-bottom:8px;">' + m.home_team + ' vs ' + m.away_team + '</div>'
         tabContent += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
-        tabContent += '<select style="flex:1;padding:6px 8px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:12px;font-family:Barlow,sans-serif;" data-result-select="' + m.id + '">'
-        tabContent += '<option value="">Select result...</option>'
-        for (const o of outcomes) {
-          tabContent += '<option value="' + o + '" ' + (ri === o ? 'selected' : '') + '>' + outcomeLabel(o, m.home_team, m.away_team) + '</option>'
-        }
-        tabContent += '</select>'
-        tabContent += '<button class="save-btn" data-save-result="' + m.id + '">Save</button>'
-        tabContent += '</div></div>'
+        tabContent += '<select style="flex:1;padding:6px 8px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:12px;font-family:Barlow,sans-serif;" data-result-select="' + m.id + '"><option value="">Select result...</option>'
+        for (const o of outcomes) tabContent += '<option value="' + o + '" ' + (ri === o ? 'selected' : '') + '>' + outcomeLabel(o, m.home_team, m.away_team) + '</option>'
+        tabContent += '</select><button class="save-btn" data-save-result="' + m.id + '">Save</button></div></div>'
       }
       tabContent += '</div>'
     }
 
-    // Also allow manual entry for any group stage match (override)
-    tabContent += '<div class="admin-section">'
-    tabContent += '<div class="admin-section-title">Manual Override (Group Stage)</div>'
+    tabContent += '<div class="admin-section"><div class="admin-section-title">Manual Override (Group Stage)</div>'
     tabContent += '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:12px;">Override auto-sync or enter a result manually for any locked group match.</div>'
-    const lockedGroupNoResult = state.matches.filter(m => m.locked && !m.result && m.stage === 'group')
+    const lockedGroupNoResult = state.matches.filter(function(m) { return m.locked && !m.result && m.stage === 'group' })
     if (lockedGroupNoResult.length === 0) {
       tabContent += '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No pending group stage results.</div>'
     } else {
       for (const m of lockedGroupNoResult) {
         const outcomes = getOutcomeList(m.stage)
         const ri = state.resultInputs[m.id] || ''
-        tabContent += '<div style="margin-bottom:12px;">'
-        tabContent += '<div style="font-size:12px;color:#e8f0e0;margin-bottom:6px;">'
-        tabContent += '<span style="font-family:Barlow Condensed,sans-serif;font-size:9px;color:#c9a84c;margin-right:6px;">GRP ' + m.group_name + '</span>'
-        tabContent += m.home_team + ' vs ' + m.away_team
-        tabContent += '</div>'
+        tabContent += '<div style="margin-bottom:12px;"><div style="font-size:12px;color:#e8f0e0;margin-bottom:6px;"><span style="font-family:Barlow Condensed,sans-serif;font-size:9px;color:#c9a84c;margin-right:6px;">GRP ' + m.group_name + '</span>' + m.home_team + ' vs ' + m.away_team + '</div>'
         tabContent += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
-        tabContent += '<select style="flex:1;padding:6px 8px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:12px;font-family:Barlow,sans-serif;" data-result-select="' + m.id + '">'
-        tabContent += '<option value="">Select result...</option>'
-        for (const o of outcomes) {
-          tabContent += '<option value="' + o + '" ' + (ri === o ? 'selected' : '') + '>' + outcomeLabel(o, m.home_team, m.away_team) + '</option>'
-        }
-        tabContent += '</select>'
-        tabContent += '<button class="save-btn" data-save-result="' + m.id + '">Save</button>'
-        tabContent += '</div></div>'
+        tabContent += '<select style="flex:1;padding:6px 8px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:12px;font-family:Barlow,sans-serif;" data-result-select="' + m.id + '"><option value="">Select result...</option>'
+        for (const o of outcomes) tabContent += '<option value="' + o + '" ' + (ri === o ? 'selected' : '') + '>' + outcomeLabel(o, m.home_team, m.away_team) + '</option>'
+        tabContent += '</select><button class="save-btn" data-save-result="' + m.id + '">Save</button></div></div>'
       }
     }
     tabContent += '</div>'
   }
 
   if (activeTab === 'payments') {
-    const paidCount = state.participants.filter(p => p.paid).length
-    tabContent += '<div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:12px;">'
-    tabContent += '<span style="color:#4ade80;font-weight:700;">' + paidCount + '</span> of <span style="color:#fff;font-weight:700;">' + state.participants.length + '</span> paid'
-    tabContent += '</div>'
+    const paidCount = state.participants.filter(function(p) { return p.paid }).length
+    tabContent += '<div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:12px;"><span style="color:#4ade80;font-weight:700;">' + paidCount + '</span> of <span style="color:#fff;font-weight:700;">' + state.participants.length + '</span> paid</div>'
     tabContent += '<div style="background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;">'
-    const sorted = [...state.participants].sort((a,b) => a.full_name.localeCompare(b.full_name))
-    sorted.forEach((u, i) => {
+    const sorted = [...state.participants].sort(function(a,b) { return a.full_name.localeCompare(b.full_name) })
+    sorted.forEach(function(u, i) {
       tabContent += '<div style="display:flex;align-items:center;padding:12px 16px;border-bottom:' + (i < sorted.length-1 ? '1px solid rgba(255,255,255,0.04)' : 'none') + ';">'
-      tabContent += '<div style="flex:1;"><div style="font-size:13px;font-weight:500;color:#e8f0e0;">' + u.full_name + '</div>'
-      tabContent += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:1px;">' + (u.phone || 'No phone') + '</div></div>'
-      tabContent += '<button data-payment="' + u.id + '" data-paid="' + u.paid + '" style="padding:6px 16px;border-radius:6px;font-family:Barlow Condensed,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;border:none;cursor:pointer;background:' + (u.paid ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)') + ';color:' + (u.paid ? '#4ade80' : '#f87171') + ';">'
-      tabContent += (u.paid ? '✓ Paid' : 'Unpaid') + '</button></div>'
+      tabContent += '<div style="flex:1;"><div style="font-size:13px;font-weight:500;color:#e8f0e0;">' + u.full_name + '</div><div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:1px;">' + (u.phone || 'No phone') + '</div></div>'
+      tabContent += '<button data-payment="' + u.id + '" data-paid="' + u.paid + '" style="padding:6px 16px;border-radius:6px;font-family:Barlow Condensed,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;border:none;cursor:pointer;background:' + (u.paid ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)') + ';color:' + (u.paid ? '#4ade80' : '#f87171') + ';">' + (u.paid ? '✓ Paid' : 'Unpaid') + '</button></div>'
     })
     tabContent += '</div>'
   }
 
-  let html = '<div class="page">'
-  html += '<div class="page-title">Admin</div>'
-  html += '<div class="page-sub">Manage matches, results, and payments.</div>'
+  let html = '<div class="page"><div class="page-title">Admin</div><div class="page-sub">Manage matches, results, and payments.</div>'
   html += '<div class="stage-tabs" style="margin-bottom:16px;">'
-  for (const t of tabs) {
-    html += '<button class="stage-tab ' + (activeTab === t ? 'active' : '') + '" data-admin-tab="' + t + '">' + tabLabels[t] + '</button>'
-  }
+  for (const t of tabs) html += '<button class="stage-tab ' + (activeTab === t ? 'active' : '') + '" data-admin-tab="' + t + '">' + tabLabels[t] + '</button>'
   html += '</div>' + tabContent + '</div>'
   return html
 }
 
 // ─── EVENT BINDING ─────────────────────────────────────────────────────────
 function bindLogin() {
-  document.getElementById('login-tab')?.addEventListener('click', () => setState({ isRegister: false, loginError: '' }))
-  document.getElementById('register-tab')?.addEventListener('click', () => setState({ isRegister: true, loginError: '' }))
-  document.getElementById('login-name')?.addEventListener('input', e => { state.loginName = e.target.value })
-  document.getElementById('login-phone')?.addEventListener('input', e => { state.loginPhone = e.target.value })
+  document.getElementById('login-tab')?.addEventListener('click', function() { setState({ isRegister: false, loginError: '' }) })
+  document.getElementById('register-tab')?.addEventListener('click', function() { setState({ isRegister: true, loginError: '' }) })
+  document.getElementById('login-name')?.addEventListener('input', function(e) { state.loginName = e.target.value })
+  document.getElementById('login-phone')?.addEventListener('input', function(e) { state.loginPhone = e.target.value })
   for (let i = 0; i < 4; i++) {
     const input = document.getElementById('pin-' + i)
     if (!input) continue
-    input.addEventListener('input', e => {
+    input.addEventListener('input', function(e) {
       const val = e.target.value.replace(/\D/g, '').slice(-1)
       e.target.value = val
       state.loginPin[i] = val
       if (val && i < 3) document.getElementById('pin-' + (i+1))?.focus()
     })
-    input.addEventListener('keydown', e => {
+    input.addEventListener('keydown', function(e) {
       if (e.key === 'Backspace' && !state.loginPin[i] && i > 0) document.getElementById('pin-' + (i-1))?.focus()
     })
   }
-  document.getElementById('login-submit')?.addEventListener('click', () => {
+  document.getElementById('login-submit')?.addEventListener('click', function() {
     const name = state.loginName.trim()
     const pin = state.loginPin.join('')
     if (!name) { setState({ loginError: 'Please enter your name' }); return }
@@ -1136,65 +1159,52 @@ function bindLogin() {
 }
 
 function bindEvents() {
-  document.getElementById('signout-btn')?.addEventListener('click', () => {
+  document.getElementById('signout-btn')?.addEventListener('click', function() {
     setState({ user: null, page: 'picks', matches: [], userPicks: {}, pendingPicks: {},
       participants: [], allPicks: [], loginPin: ['','','',''], loginName: '', loginPhone: '', loginError: '' })
   })
-  document.querySelectorAll('[data-page]').forEach(btn => {
-    btn.addEventListener('click', () => setState({ page: btn.dataset.page }))
-  })
-  document.querySelectorAll('[data-stage]').forEach(btn => {
-    btn.addEventListener('click', () => setState({ activeStage: btn.dataset.stage }))
-  })
-  document.querySelectorAll('[data-dist-stage]').forEach(btn => {
-    btn.addEventListener('click', () => setState({ activeDistStage: btn.dataset.distStage }))
-  })
-  document.querySelectorAll('[data-outcome]').forEach(btn => {
-    btn.addEventListener('click', () => {
+  document.querySelectorAll('[data-page]').forEach(function(btn) { btn.addEventListener('click', function() { setState({ page: btn.dataset.page }) }) })
+  document.querySelectorAll('[data-stage]').forEach(function(btn) { btn.addEventListener('click', function() { setState({ activeStage: btn.dataset.stage }) }) })
+  document.querySelectorAll('[data-dist-stage]').forEach(function(btn) { btn.addEventListener('click', function() { setState({ activeDistStage: btn.dataset.distStage }) }) })
+  document.querySelectorAll('[data-outcome]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
       const matchId = btn.dataset.match
       const outcome = btn.dataset.outcome
-      setState({ pendingPicks: { ...state.pendingPicks, [matchId]: outcome } })
+      const pendingPicks = Object.assign({}, state.pendingPicks)
+      pendingPicks[matchId] = outcome
+      setState({ pendingPicks: pendingPicks })
     })
   })
-  document.querySelectorAll('[data-submit]').forEach(btn => {
-    btn.addEventListener('click', () => submitPick(btn.dataset.submit))
-  })
-  document.querySelectorAll('[data-admin-tab]').forEach(btn => {
-    btn.addEventListener('click', () => setState({ adminTab: btn.dataset.adminTab }))
-  })
-  document.querySelectorAll('[data-lock]').forEach(btn => {
-    btn.addEventListener('click', () => toggleLock(btn.dataset.lock, btn.dataset.locked === 'true'))
-  })
-  document.querySelectorAll('[data-result-select]').forEach(sel => {
-    sel.addEventListener('change', e => { state.resultInputs[sel.dataset.resultSelect] = e.target.value })
-  })
-  document.querySelectorAll('[data-save-result]').forEach(btn => {
-    btn.addEventListener('click', () => {
+  document.querySelectorAll('[data-submit]').forEach(function(btn) { btn.addEventListener('click', function() { submitPick(btn.dataset.submit) }) })
+  document.querySelectorAll('[data-admin-tab]').forEach(function(btn) { btn.addEventListener('click', function() { setState({ adminTab: btn.dataset.adminTab }) }) })
+  document.querySelectorAll('[data-lock]').forEach(function(btn) { btn.addEventListener('click', function() { toggleLock(btn.dataset.lock, btn.dataset.locked === 'true') }) })
+  document.querySelectorAll('[data-result-select]').forEach(function(sel) { sel.addEventListener('change', function(e) { state.resultInputs[sel.dataset.resultSelect] = e.target.value }) })
+  document.querySelectorAll('[data-save-result]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
       const id = btn.dataset.saveResult
       const result = state.resultInputs[id]
       if (result) enterResult(id, result)
       else showToast('Please select a result', 'error')
     })
   })
-  document.querySelectorAll('[data-payment]').forEach(btn => {
-    btn.addEventListener('click', () => togglePayment(btn.dataset.payment, btn.dataset.paid === 'true'))
-  })
-  document.querySelectorAll('[data-toggle-dist-match]').forEach(el => {
-    el.addEventListener('click', () => {
+  document.querySelectorAll('[data-payment]').forEach(function(btn) { btn.addEventListener('click', function() { togglePayment(btn.dataset.payment, btn.dataset.paid === 'true') }) })
+  document.querySelectorAll('[data-toggle-dist-match]').forEach(function(el) {
+    el.addEventListener('click', function() {
       const id = el.dataset.toggleDistMatch
-      setState({ openDistMatches: { ...state.openDistMatches, [id]: !state.openDistMatches[id] } })
+      const openDistMatches = Object.assign({}, state.openDistMatches)
+      openDistMatches[id] = !openDistMatches[id]
+      setState({ openDistMatches: openDistMatches })
     })
   })
-
-  // Sync date input
-  document.getElementById('sync-date-input')?.addEventListener('change', e => {
-    state.syncDate = e.target.value
+  document.querySelectorAll('[data-expand-standing]').forEach(function(el) {
+    el.addEventListener('click', function() {
+      const id = el.dataset.expandStanding
+      setState({ expandedStandingId: state.expandedStandingId === id ? null : id })
+    })
   })
-
-  // Manual sync button
-  document.getElementById('manual-sync-btn')?.addEventListener('click', async () => {
+  document.getElementById('sync-date-input')?.addEventListener('change', function(e) { state.syncDate = e.target.value })
+  document.getElementById('manual-sync-btn')?.addEventListener('click', async function() {
     if (!state.syncDate) { showToast('Please select a date first', 'error'); return }
-    // Convert YYYY-MM-DD to YYYYMMDD
     const dateStr = state.syncDate.replace(/-/g, '')
     setState({ syncStatus: 'Syncing...' })
     const count = await syncESPNResults(dateStr)
