@@ -1002,7 +1002,8 @@ function renderPicksStatus() {
     let headerCells = ''
     for (const u of sortedParticipants) {
       headerCells += '<th style="text-align:center;padding:8px 6px;font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:rgba(255,255,255,0.25);border-bottom:1px solid rgba(255,255,255,0.06);white-space:nowrap;">'
-      headerCells += u.full_name.split(' ')[0] + '</th>'
+      const nameParts = u.full_name.trim().split(' ')
+headerCells += (nameParts.length > 1 ? nameParts[nameParts.length - 1] : nameParts[0]) + '</th>'
     }
 
     let tableRows = ''
