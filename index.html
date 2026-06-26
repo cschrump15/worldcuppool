@@ -888,7 +888,10 @@ function renderDistCard(m) {
     }
     html += '</div>'
 
-    html += '</div>'
+    setTimeout(function() { animateDonut(m.id) }, 10)
+  }
+
+  html += '</div>'
   return html
 }
 
