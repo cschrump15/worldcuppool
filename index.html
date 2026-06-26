@@ -102,7 +102,7 @@
 <script>
 
 const SUPABASE_URL = 'https://tawbzltnicvdgxlzfzsw.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhd2J6bHRuaWN2ZGd4bHpmenN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2NzQ2OTMsImV4cCI6MjA5NjI1MDY5M30.BsjXdF4eUo2Fi58h1c6V3hvlSvucMGor0TGsFriL9J0'
+const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY'
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 const STAGE_POINTS = {
@@ -143,7 +143,6 @@ function calcPoints(stage, picked, actual) {
   else return Math.max(-4, -(dist - 1))
 }
 
-// ─── DONUT CHART ───────────────────────────────────────────────────────────
 function buildDonutHTML(slices, matchId, size) {
   size = size || 180
   const r = size / 2 - 16
@@ -224,7 +223,6 @@ function animateDonut(matchId) {
   }, 50)
 }
 
-// ─── ESPN SYNC ─────────────────────────────────────────────────────────────
 const ESPN_TEAM_MAP = {
   'Mexico': 'Mexico', 'South Africa': 'South Africa',
   'Korea Republic': 'South Korea', 'South Korea': 'South Korea',
@@ -333,7 +331,6 @@ async function syncESPNResults(manualDateStr) {
   return updated
 }
 
-// ─── TEAM COLORS ───────────────────────────────────────────────────────────
 const TEAM_COLORS = {
   'Mexico':           { bg: '#006847', border: '#CE1126', text: '#fff' },
   'South Africa':     { bg: '#007A4D', border: '#FFB81C', text: '#fff' },
@@ -400,7 +397,6 @@ const TEAM_ABBR = {
   'England': 'ENG', 'Croatia': 'CRO', 'Ghana': 'GHA', 'Panama': 'PAN',
 }
 
-// ─── STATE ─────────────────────────────────────────────────────────────────
 let state = {
   user: null, page: 'picks', matches: [], userPicks: {}, pendingPicks: {},
   participants: [], allPicks: [], toast: null, toastTimer: null, loading: false,
@@ -420,7 +416,6 @@ function showToast(msg, type) {
   setState({ toast: { msg: msg, type: type }, toastTimer: timer })
 }
 
-// ─── SUPABASE ──────────────────────────────────────────────────────────────
 async function loadData() {
   const [{ data: matches }, { data: picks }, { data: users }] = await Promise.all([
     sb.from('matches').select('*').order('kickoff_time'),
@@ -514,7 +509,6 @@ function outcomeLabel(outcome, homeTeam, awayTeam) {
   return map[outcome] || outcome
 }
 
-// ─── RENDER ────────────────────────────────────────────────────────────────
 function render() {
   const app = document.getElementById('app')
   if (!app) return
@@ -577,7 +571,6 @@ function renderLogin() {
   return html
 }
 
-// ─── PICKS PAGE ────────────────────────────────────────────────────────────
 function renderPicksPage() {
   const stages = ['group','r32','r16','qf','sf','final']
   const stageLabels = { group:'Group Stage', r32:'Round of 32', r16:'Round of 16', qf:'Quarterfinals', sf:'Semifinals', final:'Final' }
@@ -684,7 +677,6 @@ function renderMatchCard(m, showGroup) {
   return html + '</div>'
 }
 
-// ─── STANDINGS PAGE ────────────────────────────────────────────────────────
 function renderStandingsPage() {
   const sorted = [...state.participants].sort(function(a,b) { return b.total - a.total })
   const lockedMatches = state.matches.filter(function(m) { return m.locked })
@@ -697,27 +689,27 @@ function renderStandingsPage() {
   }
 
   function renderDrillDown(u) {
-    // Group locked matches by ET date
+    const sortedLockedMatches = [...lockedMatches].sort(function(a, b) { return new Date(b.kickoff_time) - new Date(a.kickoff_time) })
     const byDate = {}
-    lockedMatches.forEach(function(m) {
+    const dateOrder = []
+    sortedLockedMatches.forEach(function(m) {
       const dk = new Date(m.kickoff_time).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', timeZone:'America/New_York' })
-      if (!byDate[dk]) byDate[dk] = []
+      if (!byDate[dk]) { byDate[dk] = []; dateOrder.push(dk) }
       byDate[dk].push(m)
     })
 
     let html = '<div style="background:rgba(201,168,76,0.03);border-bottom:1px solid rgba(255,255,255,0.04);">'
 
-    for (const [date, matches] of Object.entries(byDate)) {
+    for (const date of dateOrder) {
+      const matches = byDate[date]
       html += '<div style="padding:6px 12px 2px;font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#c9a84c;border-top:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);">' + date + '</div>'
 
       for (const m of matches) {
         const pick = state.allPicks.find(function(p) { return p.user_id === u.id && p.match_id === m.id })
         const pts = (pick && m.result) ? calcPoints(m.stage, pick.picked_outcome, m.result) : null
         const ptsColor = pts === null ? 'rgba(255,255,255,0.3)' : pts > 0 ? '#4ade80' : pts < 0 ? '#f87171' : 'rgba(255,255,255,0.4)'
-        const tc = pick ? (TEAM_COLORS[pick.picked_outcome.startsWith('home') ? m.home_team : pick.picked_outcome.startsWith('away') ? m.away_team : null] || null) : null
 
         html += '<div style="display:flex;align-items:center;padding:8px 12px;border-top:1px solid rgba(255,255,255,0.03);gap:8px;">'
-        // Match name
         html += '<div style="flex:1;min-width:0;">'
         html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;color:#e8f0e0;">'
         html += (TEAM_ABBR[m.home_team] || m.home_team) + ' vs ' + (TEAM_ABBR[m.away_team] || m.away_team)
@@ -728,7 +720,6 @@ function renderStandingsPage() {
           html += '<div style="font-size:10px;color:#c9a84c;margin-top:1px;">In progress</div>'
         }
         html += '</div>'
-        // Pick badge
         if (pick) {
           const pickBg = pick.picked_outcome === 'draw' ? '#c9a84c' :
             pick.picked_outcome.startsWith('home') ? (TEAM_COLORS[m.home_team] || { bg: '#444' }).bg :
@@ -741,7 +732,6 @@ function renderStandingsPage() {
         } else {
           html += '<span style="font-size:10px;color:#f87171;font-family:Barlow Condensed,sans-serif;font-weight:700;padding:2px 8px;background:rgba(248,113,113,0.1);border-radius:4px;">NO PICK</span>'
         }
-        // Points
         html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:14px;font-weight:700;color:' + ptsColor + ';min-width:28px;text-align:right;">'
         html += pts !== null ? pts : (m.result ? '-4' : '—')
         html += '</div>'
@@ -749,7 +739,7 @@ function renderStandingsPage() {
       }
     }
 
-    if (Object.keys(byDate).length === 0) {
+    if (dateOrder.length === 0) {
       html += '<div style="padding:12px;font-size:13px;color:rgba(255,255,255,0.3);">No matches started yet.</div>'
     }
 
@@ -795,13 +785,12 @@ function renderStandingsPage() {
   return html
 }
 
-// ─── DISTRIBUTIONS PAGE ────────────────────────────────────────────────────
 function renderDistributionsPage() {
   const stages = ['group','r32','r16','qf','sf','final']
   const stageLabels = { group:'Group Stage', r32:'Round of 32', r16:'Round of 16', qf:'Quarterfinals', sf:'Semifinals', final:'Final' }
   const availableStages = [...new Set(state.matches.filter(function(m) { return m.locked }).map(function(m) { return m.stage }))].sort(function(a,b) { return stages.indexOf(a) - stages.indexOf(b) })
   const activeStage = state.activeDistStage || 'group'
-  const stageMatches = state.matches.filter(function(m) { return m.stage === activeStage && m.locked })
+  const stageMatches = state.matches.filter(function(m) { return m.stage === activeStage && m.locked }).sort(function(a,b) { return new Date(b.kickoff_time) - new Date(a.kickoff_time) })
 
   let tabsHtml = '<div class="stage-tabs">'
   for (const s of availableStages) tabsHtml += '<button class="stage-tab ' + (activeStage === s ? 'active' : '') + '" data-dist-stage="' + s + '">' + stageLabels[s] + '</button>'
@@ -810,7 +799,7 @@ function renderDistributionsPage() {
   let content = ''
   for (const m of stageMatches) content += renderDistCard(m)
 
-  return '<div class="page"><div class="page-title">Distributions</div><div class="page-sub">How the pool split on each match.</div>'
+  return '<div class="page"><div class="page-title">Distributions</div><div class="page-sub">How the pool split on each match. Most recent first.</div>'
     + tabsHtml + (content || '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No locked matches yet.</div>') + '</div>'
 }
 
@@ -827,7 +816,6 @@ function renderDistCard(m) {
   matchPicks.forEach(function(p) { if (counts[p.picked_outcome] !== undefined) counts[p.picked_outcome]++ })
   const noPicks = total - matchPicks.length
 
-  // Build slices for donut
   const slices = []
   outcomes.forEach(function(o) {
     const isHome = o.startsWith('home')
@@ -853,11 +841,7 @@ function renderDistCard(m) {
 
   if (isOpen) {
     html += '<div style="padding:0 14px 14px;">'
-
-    // Donut chart
     html += buildDonutHTML(slices, m.id, 180)
-
-    // Legend table
     html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:0 12px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.06);">'
     html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.3);">Outcome</div>'
     html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.3);text-align:right;">Picks</div>'
@@ -894,8 +878,6 @@ function renderDistCard(m) {
       html += '</div>'
     }
     html += '</div>'
-
-    // Trigger animation after render
     setTimeout(function() { animateDonut(m.id) }, 10)
   }
 
@@ -903,7 +885,6 @@ function renderDistCard(m) {
   return html
 }
 
-// ─── SCORING PAGE ──────────────────────────────────────────────────────────
 function renderScoringPage() {
   const pot = (state.participants.length - 1) * 25
   const first = Math.round(pot * 0.50)
@@ -982,18 +963,58 @@ function renderScoringPage() {
   return html
 }
 
-// ─── ADMIN PAGE ────────────────────────────────────────────────────────────
 function renderPicksStatus() {
   const sortedParticipants = [...state.participants].sort(function(a,b) { return a.full_name.localeCompare(b.full_name) })
-  const matchesByDate = {}
-  state.matches.filter(function(m) { return m.stage === 'group' }).forEach(function(m) {
-    const dateKey = new Date(m.kickoff_time).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', timeZone:'America/New_York' })
-    if (!matchesByDate[dateKey]) matchesByDate[dateKey] = []
-    matchesByDate[dateKey].push(m)
+
+  const now = new Date()
+  const todayStr = now.toLocaleDateString('en-US', { timeZone: 'America/New_York' })
+  const twoDaysOut = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000)
+
+  function getETDateKey(m) {
+    return new Date(m.kickoff_time).toLocaleDateString('en-US', { timeZone: 'America/New_York' })
+  }
+  function getETDateLabel(m) {
+    return new Date(m.kickoff_time).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' })
+  }
+
+  const groupMatches = state.matches.filter(function(m) { return m.stage === 'group' })
+
+  const todayMatches = []
+  const upcomingMatches = []
+  const remainingOpenMatches = []
+  const pastMatches = []
+
+  groupMatches.forEach(function(m) {
+    const kickoff = new Date(m.kickoff_time)
+    const dateKey = getETDateKey(m)
+    if (m.locked) {
+      pastMatches.push(m)
+    } else if (dateKey === todayStr) {
+      todayMatches.push(m)
+    } else if (kickoff <= twoDaysOut) {
+      upcomingMatches.push(m)
+    } else {
+      remainingOpenMatches.push(m)
+    }
   })
 
-  let html = ''
-  for (const [date, matches] of Object.entries(matchesByDate)) {
+  todayMatches.sort(function(a,b) { return new Date(a.kickoff_time) - new Date(b.kickoff_time) })
+  upcomingMatches.sort(function(a,b) { return new Date(a.kickoff_time) - new Date(b.kickoff_time) })
+  remainingOpenMatches.sort(function(a,b) { return new Date(a.kickoff_time) - new Date(b.kickoff_time) })
+  pastMatches.sort(function(a,b) { return new Date(b.kickoff_time) - new Date(a.kickoff_time) })
+
+  function buildDateGroups(matchList) {
+    const byDate = {}
+    const dateOrder = []
+    matchList.forEach(function(m) {
+      const dk = getETDateLabel(m)
+      if (!byDate[dk]) { byDate[dk] = []; dateOrder.push(dk) }
+      byDate[dk].push(m)
+    })
+    return { byDate: byDate, dateOrder: dateOrder }
+  }
+
+  function renderMatchTable(date, matches) {
     const madePicks = matches.reduce(function(sum, m) {
       return sum + sortedParticipants.filter(function(u) { return state.allPicks.find(function(p) { return p.user_id === u.id && p.match_id === m.id }) }).length
     }, 0)
@@ -1003,7 +1024,7 @@ function renderPicksStatus() {
     for (const u of sortedParticipants) {
       headerCells += '<th style="text-align:center;padding:8px 6px;font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:rgba(255,255,255,0.25);border-bottom:1px solid rgba(255,255,255,0.06);white-space:nowrap;">'
       const nameParts = u.full_name.trim().split(' ')
-headerCells += (nameParts.length > 1 ? nameParts[nameParts.length - 1] : nameParts[0]) + '</th>'
+      headerCells += (nameParts.length > 1 ? nameParts[nameParts.length - 1] : nameParts[0]) + '</th>'
     }
 
     let tableRows = ''
@@ -1025,14 +1046,33 @@ headerCells += (nameParts.length > 1 ? nameParts[nameParts.length - 1] : namePar
       tableRows += '</tr>'
     }
 
-    html += '<div style="margin-bottom:16px;">'
+    let html = '<div style="margin-bottom:16px;">'
     html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9a84c;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;"><span>' + date + '</span><span style="color:rgba(255,255,255,0.3);font-size:10px;">' + madePicks + '/' + totalPicks + ' picks</span></div>'
     html += '<div style="background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;"><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:400px;"><thead><tr>'
     html += '<th style="text-align:left;padding:8px 12px;font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.25);border-bottom:1px solid rgba(255,255,255,0.06);white-space:nowrap;">Match</th>'
     html += headerCells
     html += '<th style="text-align:right;padding:8px 12px;font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.25);border-bottom:1px solid rgba(255,255,255,0.06);">Done</th>'
     html += '</tr></thead><tbody>' + tableRows + '</tbody></table></div></div></div>'
+    return html
   }
+
+  const sections = [
+    { label: '🔴 Today', matches: todayMatches, color: '#f87171' },
+    { label: '🟡 Upcoming (Next 2 Days)', matches: upcomingMatches, color: '#c9a84c' },
+    { label: 'Remaining Open Matches', matches: remainingOpenMatches, color: 'rgba(255,255,255,0.4)' },
+    { label: 'Past Matches', matches: pastMatches, color: 'rgba(255,255,255,0.3)' },
+  ]
+
+  let html = ''
+  sections.forEach(function(section) {
+    if (section.matches.length === 0) return
+    html += '<div style="margin-bottom:8px;font-family:Barlow Condensed,sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:' + section.color + ';">' + section.label + '</div>'
+    const grouped = buildDateGroups(section.matches)
+    for (const date of grouped.dateOrder) {
+      html += renderMatchTable(date, grouped.byDate[date])
+    }
+  })
+
   return html || '<div style="color:rgba(255,255,255,0.3);font-size:13px;padding:16px 0;">No matches yet.</div>'
 }
 
@@ -1076,7 +1116,7 @@ function renderAdminPage() {
     if (state.syncStatus) tabContent += '<div style="font-size:12px;color:#4ade80;margin-top:4px;">' + state.syncStatus + '</div>'
     tabContent += '</div>'
 
-    const lockedNoResult = state.matches.filter(function(m) { return m.locked && !m.result && m.stage !== 'group' })
+    const lockedNoResult = state.matches.filter(function(m) { return m.locked && !m.result && m.stage !== 'group' }).sort(function(a,b) { return new Date(b.kickoff_time) - new Date(a.kickoff_time) })
     if (lockedNoResult.length > 0) {
       tabContent += '<div class="admin-section"><div class="admin-section-title">Manual Results (Knockout)</div>'
       for (const m of lockedNoResult) {
@@ -1093,7 +1133,7 @@ function renderAdminPage() {
 
     tabContent += '<div class="admin-section"><div class="admin-section-title">Manual Override (Group Stage)</div>'
     tabContent += '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:12px;">Override auto-sync or enter a result manually for any locked group match.</div>'
-    const lockedGroupNoResult = state.matches.filter(function(m) { return m.locked && !m.result && m.stage === 'group' })
+    const lockedGroupNoResult = state.matches.filter(function(m) { return m.locked && !m.result && m.stage === 'group' }).sort(function(a,b) { return new Date(b.kickoff_time) - new Date(a.kickoff_time) })
     if (lockedGroupNoResult.length === 0) {
       tabContent += '<div style="color:rgba(255,255,255,0.3);font-size:13px;">No pending group stage results.</div>'
     } else {
@@ -1130,7 +1170,6 @@ function renderAdminPage() {
   return html
 }
 
-// ─── EVENT BINDING ─────────────────────────────────────────────────────────
 function bindLogin() {
   document.getElementById('login-tab')?.addEventListener('click', function() { setState({ isRegister: false, loginError: '' }) })
   document.getElementById('register-tab')?.addEventListener('click', function() { setState({ isRegister: true, loginError: '' }) })
