@@ -58,7 +58,8 @@
     .outcome-btn:disabled { cursor: default; }
     .outcome-btn.draw-btn { background: rgba(201,168,76,0.08); border-color: rgba(201,168,76,0.2); color: rgba(201,168,76,0.6); }
     .outcomes-knockout { display: flex; flex-direction: column; gap: 4px; }
-    .outcomes-row-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+    .outcomes-row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .outcomes-row-pks { display: grid; grid-template-columns: 1fr; gap: 4px; }
     .submit-pick-btn { width: 100%; margin-top: 10px; padding: 9px; border-radius: 6px; background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.35); color: #4ade80; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; }
     .submit-pick-btn:disabled { opacity: 0.35; cursor: not-allowed; }
     .result-badge { margin-top: 10px; padding: 7px 10px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); font-size: 11px; color: rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: space-between; }
@@ -123,6 +124,7 @@ function getOutcomeList(stage) {
 
 function getSide(outcome) {
   if (outcome === 'draw') return 'draw'
+  if (outcome === 'home_pks' || outcome === 'away_pks') return 'pks'
   if (outcome.startsWith('home')) return 'home'
   return 'away'
 }
@@ -400,7 +402,7 @@ const TEAM_ABBR = {
 let state = {
   user: null, page: 'picks', matches: [], userPicks: {}, pendingPicks: {},
   participants: [], allPicks: [], toast: null, toastTimer: null, loading: false,
-  activeStage: 'group', activeDistStage: 'group', adminTab: 'matches',
+  activeStage: 'r32', activeDistStage: 'group', adminTab: 'matches',
   resultInputs: {}, isRegister: false, loginName: '', loginPhone: '',
   loginPin: ['','','',''], loginError: '',
   openDistMatches: {}, expandedStandingId: null,
@@ -572,10 +574,10 @@ function renderLogin() {
 }
 
 function renderPicksPage() {
-  const stages = ['group','r32','r16','qf','sf','final']
+  const stages = ['r32','group','r16','qf','sf','final']
   const stageLabels = { group:'Group Stage', r32:'Round of 32', r16:'Round of 16', qf:'Quarterfinals', sf:'Semifinals', final:'Final' }
   const availableStages = [...new Set(state.matches.map(function(m) { return m.stage }))].sort(function(a,b) { return stages.indexOf(a) - stages.indexOf(b) })
-  const activeStage = state.activeStage || 'group'
+  const activeStage = state.activeStage || 'r32'
   const stageMatches = state.matches.filter(function(m) { return m.stage === activeStage })
   const upcoming = stageMatches.filter(function(m) { return !m.locked }).sort(function(a,b) { return new Date(a.kickoff_time) - new Date(b.kickoff_time) })
   const past = stageMatches.filter(function(m) { return m.locked }).sort(function(a,b) { return new Date(b.kickoff_time) - new Date(a.kickoff_time) })
@@ -594,7 +596,7 @@ function renderPicksPage() {
       upcomingHtml += '</div>'
     }
   } else {
-    for (const m of upcoming) upcomingHtml += renderMatchCard(m, true)
+    for (const m of upcoming) upcomingHtml += renderMatchCard(m, false)
   }
 
   let pastHtml = ''
@@ -603,7 +605,7 @@ function renderPicksPage() {
     pastHtml += '<div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>'
     pastHtml += '<div style="font-family:Barlow Condensed,sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.25);">Past Matches</div>'
     pastHtml += '<div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div></div>'
-    for (const m of past) pastHtml += renderMatchCard(m, true)
+    for (const m of past) pastHtml += renderMatchCard(m, activeStage === 'group')
   }
 
   let tabsHtml = '<div class="stage-tabs">'
@@ -637,8 +639,8 @@ function renderMatchCard(m, showGroup) {
     return ''
   }
 
-  function makeBtn(outcome) {
-    const label = outcomeLabel(outcome, m.home_team, m.away_team)
+  function makeBtn(outcome, customLabel) {
+    const label = customLabel || outcomeLabel(outcome, m.home_team, m.away_team)
     const disabled = m.locked ? 'disabled' : ''
     const extraClass = outcome === 'draw' ? ' draw-btn' : ''
     return '<button class="outcome-btn' + extraClass + (pick === outcome ? ' selected' : '') + '" style="' + getBtnStyle(outcome) + '" data-match="' + m.id + '" data-outcome="' + outcome + '" ' + disabled + '>' + label + '</button>'
@@ -652,9 +654,13 @@ function renderMatchCard(m, showGroup) {
       + '<div class="outcomes-row">' + makeBtn('away_1') + makeBtn('away_2') + makeBtn('away_3plus') + '</div>'
       + '</div>'
   } else {
+    const ha = TEAM_ABBR[m.home_team] || m.home_team
+    const aa = TEAM_ABBR[m.away_team] || m.away_team
     outcomesHtml = '<div class="outcomes-knockout">'
-      + '<div class="outcomes-row-4">' + makeBtn('home_3plus') + makeBtn('home_2') + makeBtn('home_1') + makeBtn('home_pks') + '</div>'
-      + '<div class="outcomes-row-4">' + makeBtn('away_pks') + makeBtn('away_1') + makeBtn('away_2') + makeBtn('away_3plus') + '</div>'
+      + '<div class="outcomes-row-3">' + makeBtn('home_3plus') + makeBtn('home_2') + makeBtn('home_1') + '</div>'
+      + '<div class="outcomes-row-pks">' + makeBtn('home_pks', ha + ' in PKs (Draw through reg. and ET)') + '</div>'
+      + '<div class="outcomes-row-pks">' + makeBtn('away_pks', aa + ' in PKs (Draw through reg. and ET)') + '</div>'
+      + '<div class="outcomes-row-3">' + makeBtn('away_1') + makeBtn('away_2') + makeBtn('away_3plus') + '</div>'
       + '</div>'
   }
 
@@ -888,6 +894,8 @@ function renderDistCard(m) {
     }
     html += '</div>'
 
+    html += '</div>'
+
     setTimeout(function() { animateDonut(m.id) }, 10)
   }
 
@@ -950,6 +958,11 @@ function renderScoringPage() {
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:48px;font-weight:800;color:#f87171;line-height:1;">−4 <span style="font-size:18px;color:rgba(255,255,255,0.4);font-weight:400;">pts</span></div>'
   html += '<div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">applied to all unsubmitted picks after kickoff</div></div>'
 
+  html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3);margin-bottom:10px;">Knockout PKs</div>'
+  html += '<div style="background:#141a0f;border:1px solid rgba(255,255,255,0.07);border-radius:9px;padding:14px;margin-bottom:12px;font-size:12px;color:rgba(255,255,255,0.6);line-height:1.6;">'
+  html += 'In knockout rounds, picking either team "in PKs" counts as predicting a draw through regulation + extra time. If the match goes to penalties, anyone who picked either PK option gets full winner points — only the person who picked the actual shootout winner also gets the exact bonus.'
+  html += '</div>'
+
   html += '<div style="font-family:Barlow Condensed,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3);margin-bottom:10px;">Distance Penalty</div>'
   html += '<div style="background:#141a0f;border:1px solid rgba(255,255,255,0.07);border-radius:9px;overflow:hidden;margin-bottom:12px;">'
   const penalties = [
@@ -987,14 +1000,14 @@ function renderPicksStatus() {
     return new Date(m.kickoff_time).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' })
   }
 
-  const groupMatches = state.matches.filter(function(m) { return m.stage === 'group' })
+  const allMatches = state.matches
 
   const todayMatches = []
   const upcomingMatches = []
   const remainingOpenMatches = []
   const pastMatches = []
 
-  groupMatches.forEach(function(m) {
+  allMatches.forEach(function(m) {
     const kickoff = new Date(m.kickoff_time)
     const dateKey = getETDateKey(m)
     if (m.locked) {
@@ -1049,8 +1062,9 @@ function renderPicksStatus() {
         const hasPick = state.allPicks.find(function(p) { return p.user_id === u.id && p.match_id === m.id })
         nameCells += '<td style="text-align:center;padding:9px 6px;"><span style="display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700;background:' + (hasPick ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.1)') + ';color:' + (hasPick ? '#4ade80' : '#f87171') + ';font-family:Barlow Condensed,sans-serif;">' + (hasPick ? '✓' : '—') + '</span></td>'
       }
+      const stageBadge = m.stage === 'group' ? ('GRP ' + (m.group_name || '')) : m.stage.toUpperCase()
       tableRows += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">'
-      tableRows += '<td style="padding:9px 12px;font-size:12px;font-weight:500;white-space:nowrap;color:#e8f0e0;"><span style="font-family:Barlow Condensed,sans-serif;font-size:9px;color:#c9a84c;display:block;margin-bottom:1px;">GRP ' + m.group_name + '</span>' + ha + ' vs ' + aa + '</td>'
+      tableRows += '<td style="padding:9px 12px;font-size:12px;font-weight:500;white-space:nowrap;color:#e8f0e0;"><span style="font-family:Barlow Condensed,sans-serif;font-size:9px;color:#c9a84c;display:block;margin-bottom:1px;">' + stageBadge + '</span>' + ha + ' vs ' + aa + '</td>'
       tableRows += nameCells
       tableRows += '<td style="padding:9px 12px;"><div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;"><div style="width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;"><div style="height:100%;border-radius:2px;width:' + pct + '%;background:' + barColor + ';"></div></div><span style="font-size:11px;font-weight:700;color:' + barColor + ';font-family:Barlow Condensed,sans-serif;">' + pickedCount + '/' + sortedParticipants.length + '</span></div></td>'
       tableRows += '</tr>'
